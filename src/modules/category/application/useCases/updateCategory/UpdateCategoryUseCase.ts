@@ -1,9 +1,9 @@
-import { Result } from "../../../../shared/core/Result"
-import { UseCase } from "../../../../shared/core/UseCase"
+import { Result } from "../../../../../shared/core/Result";
+import { UseCase } from "../../../../../shared/core/UseCase";
 
-import { ICategoryRepository } from "../../..//category/domain/ICategoryRepository";
-import { Category } from "../../../category/domain/Category";
-import { CategoryName } from "../../../category/domain/valueObjects/CategoryName";
+import { ICategoryRepository } from "../../../domain/ICategoryRepository";
+import { Category } from "../../../domain/Category";
+import { CategoryName } from "../../../domain/valueObjects/CategoryName";
 import { UpdateCategoryDTO } from "./UpdateCategoryDTO";
 
 export class UpdateCategoryUseCase

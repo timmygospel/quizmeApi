@@ -14,12 +14,13 @@ export class CreateQuizController extends BaseController {
             const result = await this.useCase.execute(dto);
 
             if (result.isFailure) {
-                return this.fail(result.errorValue());
+                this.fail(result.errorValue());
+                return;
             }
 
-            return this.created();
+            this.created();
         } catch (error) {
-            return this.fail(error);
+            this.fail(error);
         }
     }
 }

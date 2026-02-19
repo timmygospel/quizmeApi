@@ -1,5 +1,6 @@
-import { Router } from "express";
 import { v4 as uuid } from "uuid";
+import { Router, Request, Response } from "express";
+
 
 type Option = { text: string; correct: boolean };
 type BankQuestion = {
@@ -12,16 +13,20 @@ type BankQuestion = {
 const router = Router();
 const questionBank: BankQuestion[] = [];
 
-const validateQuestion = (body: any) => {
+type ValidateFail = { ok: false; message: string };
+type ValidateOk = { ok: true; value: Omit<BankQuestion, "id"> };
+type ValidateResult = ValidateFail | ValidateOk;
+
+const validateQuestion = (body: any): ValidateResult => {
     const question = String(body?.question ?? "").trim();
-    const options = Array.isArray(body?.options) ? body.options : [];
+    const optionsRaw = Array.isArray(body?.options) ? body.options : [];
 
     if (!question) return { ok: false, message: "question is required" };
-    if (options.length < 2) return { ok: false, message: "at least 2 options required" };
+    if (optionsRaw.length < 2) return { ok: false, message: "at least 2 options required" };
 
-    const cleaned: Option[] = options.map((o: any) => ({
+    const cleaned: Option[] = optionsRaw.map((o: any) => ({
         text: String(o?.text ?? "").trim(),
-        correct: !!o?.correct,
+        correct: Boolean(o?.correct),
     }));
 
     if (cleaned.some((o) => !o.text)) return { ok: false, message: "all options must have text" };
@@ -32,10 +37,11 @@ const validateQuestion = (body: any) => {
     const categoryIdRaw = body?.categoryId;
     const categoryId = categoryIdRaw ? String(categoryIdRaw) : undefined;
 
-    return { ok: true, value: { question, options: cleaned, categoryId } as Omit<BankQuestion, "id"> };
+    return { ok: true, value: { question, options: cleaned, categoryId } };
 };
 
-router.get("/question-bank", (req, res) => {
+
+router.get("/question-bank", (req: Request, res: Response) => {
     const categoryId = req.query.categoryId ? String(req.query.categoryId) : undefined;
 
     const result = categoryId
@@ -45,7 +51,7 @@ router.get("/question-bank", (req, res) => {
     res.json(result);
 });
 
-router.post("/question-bank", (req, res) => {
+router.post("/question-bank", (req: Request, res: Response) => {
     const parsed = validateQuestion(req.body);
     if (!parsed.ok) return res.status(400).json({ message: parsed.message });
 
@@ -54,7 +60,7 @@ router.post("/question-bank", (req, res) => {
     res.status(201).json(created);
 });
 
-router.put("/question-bank/:id", (req, res) => {
+router.put("/question-bank/:id", (req: Request, res: Response) => {
     const { id } = req.params;
 
     const idx = questionBank.findIndex((q) => q.id === id);
@@ -67,7 +73,7 @@ router.put("/question-bank/:id", (req, res) => {
     res.json(questionBank[idx]);
 });
 
-router.delete("/question-bank/:id", (req, res) => {
+router.delete("/question-bank/:id", (req: Request, res: Response) => {
     const { id } = req.params;
 
     const before = questionBank.length;

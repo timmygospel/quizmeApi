@@ -1,6 +1,5 @@
 import { BaseController } from "../../../../../shared/core/BaseController";
 import { CreateCategoryUseCase } from "../../../application/useCases/createCategory/CreateCategoryUseCase";
-import { CreateCategoryDTO } from "../../../application/useCases/createCategory/createCategoryDTO";
 import { CategoryMap } from "../../../mappers/CategoryMap";
 
 export class CreateCategoryController extends BaseController {
@@ -10,23 +9,26 @@ export class CreateCategoryController extends BaseController {
 
     protected async executeImpl(): Promise<void> {
         try {
-            const dto = this.req.body;
+            const name = this.req.body?.name;
 
-            const result = await this.useCase.execute(dto);
+            const result = await this.useCase.execute({ name });
 
             if (result.isFailure) {
                 if (result.errorValue() === "CATEGORY_NAME_ALREADY_EXISTS") {
-                    return this.conflict("Category name already exists");
+                    this.conflict("Category name already exists");
+                    return;
                 }
-                return this.clientError(result.errorValue());
+                this.clientError(result.errorValue());
+                return;
             }
 
-            return this.ok(CategoryMap.toDTO(result.getValue()));
+            this.ok(CategoryMap.toDTO(result.getValue()));
         } catch (error: any) {
             if (error?.message === "CATEGORY_NAME_ALREADY_EXISTS") {
-                return this.conflict("Category name already exists");
+                this.conflict("Category name already exists");
+                return;
             }
-            return this.fail(error);
+            this.fail(error);
         }
     }
 }

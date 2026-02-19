@@ -1,5 +1,5 @@
-import { Result } from "../../../../shared/core/Result";
-import { ICategoryRepository } from "../../../category/domain/ICategoryRepository";
+import { Result } from "../../../../../shared/core/Result";
+import { ICategoryRepository } from "../../../domain/ICategoryRepository";
 import { DeleteCategoryDTO } from "./DeleteCategoryDTO";
 
 export class DeleteCategoryUseCase {

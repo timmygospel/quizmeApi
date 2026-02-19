@@ -1,5 +1,5 @@
 import { BaseController } from "../../../../../shared/core/BaseController";
-import { GetAllCategoriesUseCase } from "../../../../application/useCases/getAllCategories/GetAllCategoriesUseCase";
+import { GetAllCategoriesUseCase } from "../../../application/useCases/getAllCategories/GetAllCategoriesUseCase";
 import { Result } from "../../../../../shared/core/Result";
 import { CategoryMap } from "../../../mappers/CategoryMap";
 import { Category } from "../../../domain/Category";

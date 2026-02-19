@@ -46,14 +46,14 @@ export class UpdateQuizUseCase implements UseCase<UpdateQuizDTO, Promise<Result<
                         }
 
                         return new Option({
-                            id: o.id,
+
                             text: optionTextOrError.getValue(),
                             correct: o.correct,
                         });
                     });
 
                     return new Question({
-                        id: q.id,
+
                         question: questionTextOrError.getValue(),
                         options,
                     });

@@ -1,25 +1,25 @@
 import { BaseController } from "../../../../../shared/core/BaseController";
 import { GetQuizUseCase } from "../../../application/useCases/getQuiz/GetQuizUseCase";
-import { Result } from "../../../../../shared/core/Result";
 
 export class GetQuizController extends BaseController {
-    constructor(private useCase: GetQuizUseCase) {
+    constructor(private readonly useCase: GetQuizUseCase) {
         super();
     }
 
-    protected async executeImpl(): Promise<any> {
+    protected async executeImpl(): Promise<void> {
         try {
-            const quizId = this.req.params.id;
+            const quizId = String(this.req.params.id);
 
-            const result: Result<any> = await this.useCase.execute({ id: quizId });
+            const quiz = await this.useCase.execute(quizId);
 
-            if (result.isFailure) {
-                return this.notFound(result.errorValue());
+            if (!quiz) {
+                this.notFound("Quiz not found");
+                return;
             }
 
-            return this.ok(result.getValue());
+            this.ok(quiz);
         } catch (err) {
-            return this.fail(err);
+            this.fail(err);
         }
     }
 }

@@ -6,26 +6,23 @@ import { initSocketServer } from "./socket";
 
 dotenv.config();
 
-const PORT = process.env.PORT || 4000;
-const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/mfquiz";
+const PORT = Number(process.env.PORT || 8080);
+const MONGO_URI = process.env.MONGO_URI;
 
-mongoose
-    .connect(MONGO_URI)
-    .then(() => {
-        console.log("✅ MongoDB connected");
+console.log("🔎 MONGO_URI exists?", Boolean(MONGO_URI));
 
-        // ✅ Create one HTTP server for both Express + Socket.IO
-        const server = http.createServer(app);
+const server = http.createServer(app);
+initSocketServer(server);
 
-        // ✅ Attach Socket.IO to the same server
-        initSocketServer(server);
+server.listen(PORT, "0.0.0.0", () => {
+    console.log(`🚀 Server listening on 0.0.0.0:${PORT}`);
+});
 
-        // ✅ Start server
-        server.listen(PORT, () => {
-            console.log(`🚀 Server running on http://localhost:${PORT}`);
-        });
-    })
-    .catch((err) => {
-        console.error("❌ MongoDB connection error:", err);
-        process.exit(1);
-    });
+if (!MONGO_URI) {
+    console.error("❌ MONGO_URI is not set");
+} else {
+    mongoose
+        .connect(MONGO_URI)
+        .then(() => console.log("✅ MongoDB connected"))
+        .catch((err) => console.error("❌ MongoDB connection error:", err));
+}
