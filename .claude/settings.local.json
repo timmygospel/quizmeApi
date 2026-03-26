@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__notion__notion-fetch",
+      "mcp__notion__notion-search",
+      "mcp__notion__notion-update-page",
+      "Bash(ls:*)",
+      "Bash(npm install:*)",
+      "Bash(npx prisma:*)",
+      "Bash(npm run:*)",
+      "Bash(npx eslint:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node -e \"const { PrismaPg } = require\\(''@prisma/adapter-pg''\\); console.log\\(typeof PrismaPg\\)\")",
+      "Bash(node -e \"const { PrismaPg } = require\\(''@prisma/adapter-pg''\\); const a = new PrismaPg\\({ connectionString: ''postgresql://x'' }\\); console.log\\(''ok''\\)\")",
+      "Bash(1:*)",
+      "Bash(node -e \":*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd /c \"taskkill /PID 8848 /F\")",
+      "Bash(powershell -Command \"Stop-Process -Id 8848 -Force\" 2>&1)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":4000\")",
+      "Bash(sed -i 's/title: session\\\\.title,/title: session.title ?? \"\"\"\",/' \"C:/github/quizmeApi/src/modules/dashboard/application/useCases/getSessionSummary/GetSessionSummaryUseCase.ts\")",
+      "Bash(powershell -Command \"cd C:/github/quizmeApi; \\\\$env:DATABASE_URL='postgres://postgres:postgres@localhost:5433/app_dev?schema=quizme'; npx prisma migrate dev --name mongo-to-postgres\" 2>&1)",
+      "Bash(mkdir -p \"C:/github/quizmeApi/prisma/migrations/20260326000000_mongo_to_postgres\")",
+      "Bash(\"prisma/migrations/20260326000000_mongo_to_postgres/migration.sql\")"
+    ]
+  }
+}

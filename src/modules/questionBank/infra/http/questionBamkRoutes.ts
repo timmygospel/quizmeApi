@@ -1,6 +1,6 @@
 import express from "express";
 
-import { MongoQuestionBankRepository } from "../db/MongoQuestionBankRepository";
+import { PrismaQuestionBankRepository } from "../db/PrismaQuestionBankRepository";
 
 import { CreateQuestionBankUseCase } from "../../application/useCases/createQuestion/CreateQuestionBankUseCase";
 import { GetAllQuestionBankUseCase } from "../../application/useCases/getAllQuestions/GetAllQuestionBankUseCase";
@@ -13,7 +13,7 @@ import { UpdateQuestionBankController } from "./controllers/UpdateQuestionBankCo
 import { DeleteQuestionBankController } from "./controllers/DeleteQuestionBankController";
 
 const router = express.Router();
-const repo = new MongoQuestionBankRepository();
+const repo = new PrismaQuestionBankRepository();
 
 const createUseCase = new CreateQuestionBankUseCase(repo);
 const getAllUseCase = new GetAllQuestionBankUseCase(repo);

@@ -3,6 +3,14 @@ primary_region = "lhr"
 
 [build]
 
+# Runs once before machines are updated — runs pending migrations safely
+[deploy]
+  release_command = "npx prisma migrate deploy"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+
 [http_service]
   internal_port = 8080
   force_https = true

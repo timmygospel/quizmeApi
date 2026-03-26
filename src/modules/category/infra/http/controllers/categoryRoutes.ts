@@ -1,7 +1,7 @@
 import express from "express";
 
 
-import { MongoCategoryRepository } from "../../db/MongoCategoryRepository";
+import { PrismaCategoryRepository } from "../../db/PrismaCategoryRepository";
 import { CreateCategoryUseCase } from "../../../application/useCases/createCategory/CreateCategoryUseCase";
 // import { GetAllCategoriesUseCase } from "../../application/useCases/getAllCategories/GetAllCategoriesUseCase";
 import { GetAllCategoriesUseCase } from "../../../application/useCases/getAllCategories/GetAllCategoriesUseCase";
@@ -19,7 +19,7 @@ import { UpdateCategoryUseCase } from "../../../application/useCases/updateCateg
 import { UpdateCategoryController } from "./UpdateCategoryController";
 
 const router = express.Router();
-const repo = new MongoCategoryRepository();
+const repo = new PrismaCategoryRepository();
 
 const createCategoryUseCase = new CreateCategoryUseCase(repo);
 const getAllCategoriesUseCase = new GetAllCategoriesUseCase(repo);

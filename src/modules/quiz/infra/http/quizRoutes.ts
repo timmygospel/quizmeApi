@@ -1,6 +1,6 @@
 import express from "express";
 
-import { MongoQuizRepository } from "../db/MongoQuizRepository";
+import { PrismaQuizRepository } from "../db/PrismaQuizRepository";
 // ✅ Use Cases
 
 import { CreateQuizUseCase } from "../../application/useCases/createQuiz/CreateQuizUseCase";
@@ -19,7 +19,7 @@ import { GetQuizController } from "./controllers/GetQuizController";
 import { GetAllQuizzesController } from "./controllers/GetAllQuizzesController";
 
 const router = express.Router();
-const repo = new MongoQuizRepository();
+const repo = new PrismaQuizRepository();
 
 // Instantiate use cases
 const createQuizUseCase = new CreateQuizUseCase(repo);

@@ -1,0 +1,268 @@
+// Prisma schema for Quizme
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  TRAINER
+  PARTICIPANT
+}
+
+enum SessionStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum QuizMode {
+  LIVE  // admin pushes one question at a time
+  FULL  // participant receives all questions at once and submits in one go
+}
+
+// ---------------------------------------------------------------------------
+// Core entities
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users    User[]
+  quizzes  Quiz[]
+  sessions QuizSession[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  role      UserRole @default(PARTICIPANT)
+  orgId     String?
+  createdAt DateTime @default(now())
+
+  org            Organization? @relation(fields: [orgId], references: [id])
+  hostedSessions QuizSession[]
+  attempts       Attempt[]
+
+  @@index([orgId])
+  @@index([role])
+  @@index([email])
+}
+
+// ---------------------------------------------------------------------------
+// Category
+// ---------------------------------------------------------------------------
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  questionBankQuestions QuestionBankQuestion[]
+}
+
+// ---------------------------------------------------------------------------
+// Question Bank (standalone question library)
+// ---------------------------------------------------------------------------
+
+model QuestionBankQuestion {
+  id         String   @id @default(uuid())
+  question   String
+  categoryId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  category Category?            @relation(fields: [categoryId], references: [id])
+  options  QuestionBankOption[]
+
+  @@index([categoryId])
+}
+
+model QuestionBankOption {
+  id         String  @id @default(uuid())
+  questionId String
+  text       String
+  correct    Boolean @default(false)
+  index      Int     // 0-based position within the question
+
+  question QuestionBankQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, index])
+  @@index([questionId])
+}
+
+// ---------------------------------------------------------------------------
+// Quiz structure
+// ---------------------------------------------------------------------------
+
+model Quiz {
+  id             String   @id @default(uuid())
+  title          String
+  description    String?
+  orgId          String?
+  createdById    String?
+  passingScore   Int      @default(70) // percentage 0–100
+  totalQuestions Int      @default(0)
+  // Quiz mode & configuration
+  mode               QuizMode @default(LIVE)
+  passRateEnabled    Boolean  @default(false)
+  timed              Boolean  @default(false)
+  timeLimitSeconds   Int?     // null = untimed
+  feedbackEnabled    Boolean  @default(false)
+  feedbackShowScore  Boolean  @default(false)
+  feedbackShowPassFail Boolean @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  org       Organization? @relation(fields: [orgId], references: [id])
+  questions Question[]
+  sessions  QuizSession[]
+
+  @@index([orgId])
+  @@index([createdAt])
+}
+
+model Question {
+  id        String   @id @default(uuid())
+  quizId    String
+  text      String
+  topicTag  String?  // used for topic-level score analytics
+  index     Int      // 0-based position within the quiz
+  createdAt DateTime @default(now())
+
+  quiz    Quiz          @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  options Option[]
+  answers AttemptAnswer[]
+
+  @@unique([quizId, index])
+  @@index([quizId])
+  @@index([topicTag])
+}
+
+model Option {
+  id         String  @id @default(uuid())
+  questionId String
+  text       String
+  isCorrect  Boolean @default(false)
+  index      Int     // 0-based position within the question
+
+  question Question      @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answers  AttemptAnswer[]
+
+  @@unique([questionId, index])
+  @@index([questionId])
+}
+
+// ---------------------------------------------------------------------------
+// Live sessions
+// ---------------------------------------------------------------------------
+
+model QuizSession {
+  id                  String        @id @default(uuid())
+  eventCode           String        @unique
+  quizId              String?
+  name                String        // event name set by admin at creation
+  title               String?       // quiz title, set when admin joins via socket
+  hostId              String?
+  orgId               String?
+  status              SessionStatus @default(ACTIVE)
+  adminToken          String        @unique
+  activeQuestionIndex Int           @default(0)
+  questionVisible     Boolean       @default(false)
+  startedAt           DateTime      @default(now())
+  endedAt             DateTime?
+
+  host     User?         @relation(fields: [hostId], references: [id])
+  quiz     Quiz?         @relation(fields: [quizId], references: [id])
+  org      Organization? @relation(fields: [orgId], references: [id])
+  attempts Attempt[]
+
+  @@index([eventCode])
+  @@index([status])
+  @@index([hostId])
+  @@index([orgId])
+  @@index([startedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Participant attempts and answers (high-read — fully indexed)
+// ---------------------------------------------------------------------------
+
+model Attempt {
+  id          String        @id @default(uuid())
+  sessionId   String
+  userId      String?       // null for anonymous (display-name only) participants
+  displayName String
+  status      AttemptStatus @default(IN_PROGRESS)
+  totalScore  Float?        // percentage 0–100, null until attempt is completed
+  passed      Boolean?      // null until attempt is completed
+  startedAt   DateTime      @default(now())
+  completedAt DateTime?
+
+  session  QuizSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user     User?         @relation(fields: [userId], references: [id])
+  answers  AttemptAnswer[]
+
+  @@unique([sessionId, displayName])
+  @@index([sessionId])
+  @@index([userId])
+  @@index([status])
+  @@index([totalScore])
+}
+
+// ---------------------------------------------------------------------------
+// Audit log — records key system actions for compliance and debugging
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String   // e.g. "dashboard.view", "quiz.create", "report.export"
+  userId    String?  // null for unauthenticated / anonymous actions
+  sessionId String?  // optional: which QuizSession this relates to
+  meta      Json?    // arbitrary context (eventCode, ip, etc.)
+  createdAt DateTime @default(now())
+
+  @@index([action])
+  @@index([userId])
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+model AttemptAnswer {
+  id               String   @id @default(uuid())
+  attemptId        String
+  questionId       String
+  selectedOptionId String?  // null if the question was left unanswered
+  isCorrect        Boolean
+  answeredAt       DateTime @default(now())
+
+  attempt        Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question       Question @relation(fields: [questionId], references: [id])
+  selectedOption Option?  @relation(fields: [selectedOptionId], references: [id])
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+  @@index([questionId])
+}

@@ -16,6 +16,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
+# Generate Prisma client before TypeScript compile (client is gitignored)
+RUN npm run db:generate
 RUN npm run build
 RUN npm prune --omit=dev
 

@@ -3,9 +3,10 @@ import cors from "cors";
 import { redis } from "./shared/infra/redis/redisClient";
 
 import quizRoutes from "./modules/quiz/infra/http/quizRoutes";
-import categoryRoutes from "./modules/quiz/infra/http/categoryRoutes";
-import questionBankRoutes from "./modules/quiz/infra/http/questionBankRoutes";
+import categoryRoutes from "./modules/category/infra/http/controllers/categoryRoutes";
+import questionBankRoutes from "./modules/questionBank/infra/http/questionBamkRoutes";
 import liveEventRoutes from "./modules/liveEvents/infra/http/liveEventRoutes";
+import dashboardRoutes from "./modules/dashboard/infra/http/dashboardRoutes";
 
 const app = express();
 
@@ -13,6 +14,7 @@ app.use(express.json());
 
 const allowedOrigins = [
     "http://localhost:5173",
+    "http://localhost:5174",
     "https://mfquiz-web.fly.dev",
 ];
 
@@ -46,5 +48,6 @@ app.use("/api/v1", quizRoutes);
 app.use("/api/v1", categoryRoutes);
 app.use("/api/v1", questionBankRoutes);
 app.use("/api/v1", liveEventRoutes);
+app.use("/api/v1/dashboard", dashboardRoutes);
 
 export default app;

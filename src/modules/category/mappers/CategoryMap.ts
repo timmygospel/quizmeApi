@@ -1,35 +1,20 @@
 import { Category } from "../domain/Category";
 import { CategoryName } from "../domain/valueObjects/CategoryName";
 import { CategoryDTO } from "../dtos/CategoryDTO";
-import { ICategoryDocument } from "../infra/db/CategoryModel";
+
+type PrismaCategory = { id: string; name: string; createdAt: Date; updatedAt: Date };
 
 export class CategoryMap {
     public static toDTO(category: Category): CategoryDTO {
-        return {
-            id: category.id,
-            name: category.name,
-        };
+        return { id: category.id!, name: category.name };
     }
 
-    public static toDomain(raw: ICategoryDocument): Category {
+    public static toDomain(raw: PrismaCategory): Category {
         const nameOrError = CategoryName.create(raw.name);
-        if (nameOrError.isFailure) {
-            throw new Error(nameOrError.errorValue());
-        }
-
+        if (nameOrError.isFailure) throw new Error(nameOrError.errorValue());
         return new Category(
-            {
-                name: nameOrError.getValue(),
-                createdAt: raw.createdAt,
-                updatedAt: raw.updatedAt,
-            },
-            String(raw._id)
+            { name: nameOrError.getValue(), createdAt: raw.createdAt, updatedAt: raw.updatedAt },
+            raw.id,
         );
-    }
-
-    public static toPersistence(category: Category): any {
-        return {
-            name: category.name,
-        };
     }
 }

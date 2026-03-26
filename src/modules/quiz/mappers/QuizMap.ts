@@ -1,64 +1,49 @@
 import { Quiz } from "../domain/Quiz";
 import { Question } from "../domain/Question";
 import { Option } from "../domain/Option";
-import { IQuizDocument } from "../infra/db/QuizModel";
 import { QuizDTO } from "../application/useCases/getQuiz/GetQuizDTO";
 import { QuizTitle } from "../domain/valueObjects/QuizTitle";
 import { QuestionText } from "../domain/valueObjects/QuestionText";
 import { OptionText } from "../domain/valueObjects/OptionText";
 
+// Prisma shape returned by findUnique/findMany with relations
+type PrismaOption = { id: string; text: string; isCorrect: boolean; index: number };
+type PrismaQuestion = { id: string; text: string; index: number; options: PrismaOption[] };
+type PrismaQuiz = {
+    id: string;
+    title: string;
+    createdAt: Date;
+    updatedAt: Date;
+    questions: PrismaQuestion[];
+};
+
 export class QuizMap {
-    // ✅ Mongo Document → Domain
-    public static toDomain(raw: IQuizDocument): Quiz {
+    // Prisma record → Domain
+    public static toDomain(raw: PrismaQuiz): Quiz {
         const titleOrError = QuizTitle.create(raw.title);
         if (titleOrError.isFailure) throw new Error(titleOrError.errorValue());
 
-        const questions = raw.questions.map((q) => {
-            const questionTextOrError = QuestionText.create(q.question);
-            if (questionTextOrError.isFailure) throw new Error(questionTextOrError.errorValue());
+        const questions = [...(raw.questions ?? [])]
+            .sort((a, b) => a.index - b.index)
+            .map((q) => {
+                const questionTextOrError = QuestionText.create(q.text);
+                if (questionTextOrError.isFailure) throw new Error(questionTextOrError.errorValue());
 
-            const options = q.options.map((o) => {
-                const optionTextOrError = OptionText.create(o.text);
-                if (optionTextOrError.isFailure) throw new Error(optionTextOrError.errorValue());
+                const options = [...(q.options ?? [])]
+                    .sort((a, b) => a.index - b.index)
+                    .map((o) => {
+                        const optionTextOrError = OptionText.create(o.text);
+                        if (optionTextOrError.isFailure) throw new Error(optionTextOrError.errorValue());
+                        return new Option({ id: o.id, text: optionTextOrError.getValue(), correct: o.isCorrect });
+                    });
 
-                return new Option({
-                    id: o._id?.toString(),
-                    text: optionTextOrError.getValue(),
-                    correct: o.correct,
-                });
+                return new Question({ id: q.id, question: questionTextOrError.getValue(), options });
             });
 
-            return new Question({
-                id: q._id?.toString(),
-                question: questionTextOrError.getValue(),
-                options,
-            });
-        });
-
-        return new Quiz({
-            id: raw._id?.toString(),
-            title: titleOrError.getValue(),
-            questions,
-            createdAt: raw.createdAt,
-            updatedAt: raw.updatedAt,
-        });
+        return new Quiz({ id: raw.id, title: titleOrError.getValue(), questions, createdAt: raw.createdAt, updatedAt: raw.updatedAt });
     }
 
-    // ✅ Domain → Mongo
-    public static toPersistence(quiz: Quiz): any {
-        return {
-            title: quiz.title.value,
-            questions: quiz.questions.map((q) => ({
-                question: q.question.value,
-                options: q.options.map((o) => ({
-                    text: o.text.value,
-                    correct: o.correct,
-                })),
-            })),
-        };
-    }
-
-    // ✅ Domain → DTO
+    // Domain → DTO
     public static toDTO(quiz: Quiz): QuizDTO {
         return {
             id: quiz.id!,
