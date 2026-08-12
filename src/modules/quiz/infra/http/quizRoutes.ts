@@ -1,6 +1,6 @@
 import express from "express";
 
-import { MongoQuizRepository } from "../db/MongoQuizRepository";
+import { PgQuizRepository } from "../db/PgQuizRepository";
 // ✅ Use Cases
 
 import { CreateQuizUseCase } from "../../application/useCases/createQuiz/CreateQuizUseCase";
@@ -19,7 +19,7 @@ import { GetQuizController } from "./controllers/GetQuizController";
 import { GetAllQuizzesController } from "./controllers/GetAllQuizzesController";
 
 const router = express.Router();
-const repo = new MongoQuizRepository();
+const repo = new PgQuizRepository();
 
 // Instantiate use cases
 const createQuizUseCase = new CreateQuizUseCase(repo);

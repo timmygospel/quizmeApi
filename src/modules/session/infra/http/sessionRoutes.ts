@@ -1,0 +1,28 @@
+import express from "express";
+
+import { PgSessionRepository } from "../db/PgSessionRepository";
+import { PgQuizRepository } from "../../../quiz/infra/db/PgQuizRepository";
+import { CreateSessionUseCase } from "../../application/useCases/createSession/CreateSessionUseCase";
+import { GetAllSessionsUseCase } from "../../application/useCases/getAllSessions/GetAllSessionsUseCase";
+import { GetSessionUseCase } from "../../application/useCases/getSession/GetSessionUseCase";
+import { CreateSessionController } from "./controllers/CreateSessionController";
+import { GetAllSessionsController } from "./controllers/GetAllSessionsController";
+import { GetSessionController } from "./controllers/GetSessionController";
+
+const router = express.Router();
+const sessionRepo = new PgSessionRepository();
+const quizRepo = new PgQuizRepository();
+
+const createSessionUseCase = new CreateSessionUseCase(sessionRepo, quizRepo);
+const getAllSessionsUseCase = new GetAllSessionsUseCase(sessionRepo);
+const getSessionUseCase = new GetSessionUseCase(sessionRepo);
+
+const createSessionController = new CreateSessionController(createSessionUseCase);
+const getAllSessionsController = new GetAllSessionsController(getAllSessionsUseCase);
+const getSessionController = new GetSessionController(getSessionUseCase);
+
+router.post("/sessions", (req, res) => createSessionController.execute(req, res));
+router.get("/sessions", (req, res) => getAllSessionsController.execute(req, res));
+router.get("/sessions/:id", (req, res) => getSessionController.execute(req, res));
+
+export default router;

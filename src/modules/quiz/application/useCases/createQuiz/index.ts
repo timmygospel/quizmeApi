@@ -1,7 +1,7 @@
-import { MongoQuizRepository } from "../../../infra/db/MongoQuizRepository";
+import { PgQuizRepository } from "../../../infra/db/PgQuizRepository";
 import { CreateQuizUseCase } from "./CreateQuizUseCase";
 
-const quizRepository = new MongoQuizRepository();
+const quizRepository = new PgQuizRepository();
 const createQuizUseCase = new CreateQuizUseCase(quizRepository);
 
 export { createQuizUseCase };

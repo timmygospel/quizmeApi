@@ -1,10 +1,28 @@
 import { QuestionBankQuestion } from "../domain/QuestionBankQuestion";
 import { QuestionText } from "../domain/valueObjects/QuestionText";
-//import { QuestionOption } from "../domain/valueObjects/QuestionOption";
 import { QuestionOption } from "../domain/valueObjects/QuestionOptions";
 import { QuestionBankDTO } from "../dtos/QuestionBankDTO";
-import { IQuestionBankDocument } from "../infra/db/QuestionBankModel";
 
+export interface QuestionBankQuestionRow {
+    id: string;
+    question_text: string;
+    category_id: string | null;
+    created_at: Date;
+    updated_at: Date;
+}
+
+export interface QuestionBankOptionRow {
+    id: string;
+    question_id: string;
+    text: string;
+    is_correct: boolean;
+    display_order: number;
+}
+
+export interface QuestionBankRows {
+    question: QuestionBankQuestionRow;
+    options: QuestionBankOptionRow[];
+}
 
 export class QuestionBankMap {
     public static toDTO(q: QuestionBankQuestion): QuestionBankDTO {
@@ -16,12 +34,13 @@ export class QuestionBankMap {
         };
     }
 
-    public static toDomain(raw: IQuestionBankDocument): QuestionBankQuestion {
-        const questionOrError = QuestionText.create(raw.question);
+    public static toDomain(raw: QuestionBankRows): QuestionBankQuestion {
+        const questionOrError = QuestionText.create(raw.question.question_text);
         if (questionOrError.isFailure) throw new Error(questionOrError.errorValue());
 
-        const optionResults = raw.options.map((o) =>
-            QuestionOption.create({ text: o.text, correct: o.correct })
+        const sortedOptions = [...raw.options].sort((a, b) => a.display_order - b.display_order);
+        const optionResults = sortedOptions.map((o) =>
+            QuestionOption.create({ text: o.text, correct: o.is_correct })
         );
 
         for (const r of optionResults) {
@@ -37,19 +56,11 @@ export class QuestionBankMap {
             {
                 question: questionOrError.getValue(),
                 options,
-                categoryId: raw.categoryId ? String(raw.categoryId) : undefined,
-                createdAt: raw.createdAt,
-                updatedAt: raw.updatedAt,
+                categoryId: raw.question.category_id ?? undefined,
+                createdAt: raw.question.created_at,
+                updatedAt: raw.question.updated_at,
             },
-            String(raw._id)
+            raw.question.id
         );
-    }
-
-    public static toPersistence(q: QuestionBankQuestion): any {
-        return {
-            question: q.question,
-            options: q.options,
-            categoryId: q.categoryId ?? null,
-        };
     }
 }

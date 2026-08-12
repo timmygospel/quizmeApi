@@ -3,6 +3,11 @@ import { Quiz } from "../../../domain/Quiz";
 import { UseCase } from "../../../../../shared/core/UseCase";
 import { Result } from "../../../../../shared/core/Result";
 
+/**
+ * Returns domain Quiz aggregates. Controllers MUST map these through
+ * QuizMap.toDTO before serializing — Quiz/Question/Option fields are
+ * Value Object instances (e.g. `title.value`), not plain strings.
+ */
 export class GetAllQuizzesUseCase implements UseCase<void, Result<Quiz[]>> {
     constructor(private quizRepo: IQuizRepository) { }
 

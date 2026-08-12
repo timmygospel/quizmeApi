@@ -35,10 +35,16 @@ export class CreateQuizUseCase implements UseCase<CreateQuizDTO, Promise<Result<
                 });
             }) || [];
 
-            // ✅ 3. Build the Aggregate Root (Quiz)
+            // ✅ 3. Build Sections (optional — plain data, no VO invariants beyond a name)
+            const sections = (dto.sections ?? [])
+                .filter((s) => s.name && s.name.trim().length > 0)
+                .map((s) => ({ name: s.name.trim(), questionIds: s.questionIds ?? [] }));
+
+            // ✅ 4. Build the Aggregate Root (Quiz)
             const quiz = new Quiz({
                 title: titleOrError.getValue(),
                 questions,
+                sections,
             });
 
             // ✅ 4. Persist via Repository

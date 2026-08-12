@@ -1,5 +1,6 @@
 import { BaseController } from "../../../../../shared/core/BaseController";
 import { GetQuizUseCase } from "../../../application/useCases/getQuiz/GetQuizUseCase";
+import { QuizMap } from "../../../mappers/QuizMap";
 
 export class GetQuizController extends BaseController {
     constructor(private readonly useCase: GetQuizUseCase) {
@@ -17,8 +18,12 @@ export class GetQuizController extends BaseController {
                 return;
             }
 
-            this.ok(quiz);
+            this.ok(QuizMap.toDTO(quiz));
         } catch (err) {
+            if (err instanceof Error && err.message === "Quiz not found") {
+                this.notFound("Quiz not found");
+                return;
+            }
             this.fail(err);
         }
     }

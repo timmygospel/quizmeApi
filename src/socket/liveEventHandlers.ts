@@ -1,5 +1,5 @@
 import { Server, Socket } from "socket.io";
-import { LiveEventModel } from "../modules/liveEvents/infra/db/LiveEventModel";
+import { PgLiveEventRepository } from "../modules/liveEvents/infra/db/PgLiveEventRepository";
 import crypto from "crypto";
 import { redis } from "../shared/infra/redis/redisClient";
 
@@ -65,6 +65,8 @@ type AnswerPayload = {
 
 const TTL = 86400; // 24 hours in seconds
 
+const liveEventRepo = new PgLiveEventRepository();
+
 /* -----------------------------
    Structured Logger
 ------------------------------*/
@@ -92,8 +94,6 @@ function log(
 const keys = {
     quiz: (code: string) => `event:${code}:quiz`,
     active: (code: string) => `event:${code}:active`,
-    answers: (code: string, qIdx: number) =>
-        `event:${code}:answers:${qIdx}`,
     counts: (code: string, qIdx: number) =>
         `event:${code}:counts:${qIdx}`,
 };
@@ -180,8 +180,9 @@ async function setActiveState(code: string, state: ActiveState): Promise<void> {
     }
 }
 
-async function computeResultsFromRedis(
-    code: string,
+async function computeResults(
+    eventCode: string,
+    liveEventId: string,
     qIdx: number,
     optionCount: number,
     correctIndex: number
@@ -192,10 +193,11 @@ async function computeResultsFromRedis(
     correctCount: number;
     incorrectCount: number;
 }> {
-    const counts = new Array(optionCount).fill(0);
+    let counts: number[];
 
     if (redis) {
-        const raw = await redis.hgetall(keys.counts(code, qIdx));
+        counts = new Array(optionCount).fill(0);
+        const raw = await redis.hgetall(keys.counts(eventCode, qIdx));
         for (const [optStr, countStr] of Object.entries(raw ?? {})) {
             const idx = Number(optStr);
             const cnt = Number(countStr);
@@ -203,6 +205,8 @@ async function computeResultsFromRedis(
                 counts[idx] = cnt;
             }
         }
+    } else {
+        counts = await liveEventRepo.getAnswerCountsByOption(liveEventId, qIdx, optionCount);
     }
 
     const total = counts.reduce((a: number, b: number) => a + b, 0);
@@ -212,33 +216,6 @@ async function computeResultsFromRedis(
     return {
         countsByOption: counts,
         correctIndex,
-        totalAnswers: total,
-        correctCount,
-        incorrectCount,
-    };
-}
-
-function computeResults(
-    q: QuizQuestion,
-    answersForQuestion: Record<string, number>
-) {
-    const counts = new Array(q.options.length).fill(0);
-
-    Object.values(answersForQuestion ?? {}).forEach((optIdx) => {
-        const idx = Number(optIdx);
-        if (!Number.isNaN(idx) && idx >= 0 && idx < counts.length) {
-            counts[idx] += 1;
-        }
-    });
-
-    const total = counts.reduce((a: number, b: number) => a + b, 0);
-    const correctCount =
-        q.correctIndex >= 0 ? counts[q.correctIndex] : 0;
-    const incorrectCount = total - correctCount;
-
-    return {
-        countsByOption: counts,
-        correctIndex: q.correctIndex,
         totalAnswers: total,
         correctCount,
         incorrectCount,
@@ -261,7 +238,7 @@ export function registerLiveEventHandlers(io: Server) {
                 const eventCode = safeCode(payload.eventCode);
                 const name = payload.name?.trim();
 
-                const ev = await LiveEventModel.findOne({ eventCode }).exec();
+                const ev = await liveEventRepo.findByEventCode(eventCode);
                 if (!ev || ev.status !== "live") {
                     cb?.({ ok: false, message: "Event not found or not live" });
                     return;
@@ -273,20 +250,15 @@ export function registerLiveEventHandlers(io: Server) {
                 socket.data.eventCode = eventCode;
                 socket.join(room(eventCode));
 
-                ev.participants.push({
-                    participantId,
-                    name,
-                    joinedAt: new Date(),
-                });
-
-                await ev.save();
+                await liveEventRepo.addParticipant(ev.id, participantId, name);
+                const participantsCount = await liveEventRepo.countParticipants(ev.id);
 
                 log("info", "participant joined", { eventCode, participantId });
 
                 const quiz = await getQuizSnapshot(eventCode);
                 const activeState = await getActiveState(eventCode, {
-                    activeQuestionIndex: ev.activeQuestionIndex,
-                    questionVisible: ev.questionVisible,
+                    activeQuestionIndex: ev.active_question_index,
+                    questionVisible: ev.question_visible,
                 });
 
                 // Send initial state
@@ -303,7 +275,7 @@ export function registerLiveEventHandlers(io: Server) {
                 // Broadcast participants count
                 io.to(room(eventCode)).emit("event:participantsCount", {
                     eventCode,
-                    participantsCount: ev.participants.length,
+                    participantsCount,
                 });
 
                 // If question is active, send immediately
@@ -322,19 +294,13 @@ export function registerLiveEventHandlers(io: Server) {
                         },
                     });
 
-                    const results = redis
-                        ? await computeResultsFromRedis(
-                              eventCode,
-                              activeState.activeQuestionIndex,
-                              activeQ.options.length,
-                              activeQ.correctIndex
-                          )
-                        : computeResults(
-                              activeQ,
-                              ev.answers[
-                                  String(activeState.activeQuestionIndex)
-                              ] ?? {}
-                          );
+                    const results = await computeResults(
+                        eventCode,
+                        ev.id,
+                        activeState.activeQuestionIndex,
+                        activeQ.options.length,
+                        activeQ.correctIndex
+                    );
 
                     io.to(socket.id).emit("event:results", {
                         eventCode,
@@ -355,8 +321,8 @@ export function registerLiveEventHandlers(io: Server) {
             async (payload: AdminJoinPayload, cb?: Function) => {
                 const eventCode = safeCode(payload.eventCode);
 
-                const ev = await LiveEventModel.findOne({ eventCode }).exec();
-                if (!ev || ev.adminToken !== payload.adminToken) {
+                const ev = await liveEventRepo.findByEventCode(eventCode);
+                if (!ev || ev.admin_token !== payload.adminToken) {
                     cb?.({ ok: false, message: "Unauthorized" });
                     return;
                 }
@@ -372,9 +338,16 @@ export function registerLiveEventHandlers(io: Server) {
 
                 await setQuizSnapshot(eventCode, snapshot);
                 await setActiveState(eventCode, {
-                    activeQuestionIndex: ev.activeQuestionIndex,
-                    questionVisible: ev.questionVisible,
+                    activeQuestionIndex: ev.active_question_index,
+                    questionVisible: ev.question_visible,
                 });
+
+                // Durable, immutable snapshot for post-event analytics.
+                await liveEventRepo.saveQuestionSnapshot(
+                    ev.id,
+                    ev.quiz_id,
+                    normalizedQuestions.map((q) => ({ question: q.question, options: q.options }))
+                );
 
                 socket.data.isAdmin = true;
                 socket.data.eventCode = eventCode;
@@ -394,8 +367,8 @@ export function registerLiveEventHandlers(io: Server) {
             async (payload: SetActivePayload) => {
                 const eventCode = safeCode(payload.eventCode);
 
-                const ev = await LiveEventModel.findOne({ eventCode }).exec();
-                if (!ev || ev.adminToken !== payload.adminToken) return;
+                const ev = await liveEventRepo.findByEventCode(eventCode);
+                if (!ev || ev.admin_token !== payload.adminToken) return;
 
                 const quiz = await getQuizSnapshot(eventCode);
 
@@ -412,9 +385,7 @@ export function registerLiveEventHandlers(io: Server) {
                     return;
                 }
 
-                ev.activeQuestionIndex = payload.questionIndex;
-                ev.questionVisible = true;
-                await ev.save();
+                await liveEventRepo.setActiveQuestion(ev.id, payload.questionIndex, true);
 
                 await setActiveState(eventCode, {
                     activeQuestionIndex: payload.questionIndex,
@@ -440,17 +411,13 @@ export function registerLiveEventHandlers(io: Server) {
                     },
                 });
 
-                const results = redis
-                    ? await computeResultsFromRedis(
-                          eventCode,
-                          payload.questionIndex,
-                          q.options.length,
-                          q.correctIndex
-                      )
-                    : computeResults(
-                          q,
-                          ev.answers[String(payload.questionIndex)] ?? {}
-                      );
+                const results = await computeResults(
+                    eventCode,
+                    ev.id,
+                    payload.questionIndex,
+                    q.options.length,
+                    q.correctIndex
+                );
 
                 io.to(room(eventCode)).emit("event:results", {
                     eventCode,
@@ -468,20 +435,20 @@ export function registerLiveEventHandlers(io: Server) {
             async (payload: ShowPayload) => {
                 const eventCode = safeCode(payload.eventCode);
 
-                const ev = await LiveEventModel.findOne({ eventCode }).exec();
-                if (!ev || ev.adminToken !== payload.adminToken) return;
+                const ev = await liveEventRepo.findByEventCode(eventCode);
+                if (!ev || ev.admin_token !== payload.adminToken) return;
 
-                ev.questionVisible = !!payload.visible;
-                await ev.save();
+                const visible = !!payload.visible;
+                await liveEventRepo.setQuestionVisible(ev.id, visible);
 
                 await setActiveState(eventCode, {
-                    activeQuestionIndex: ev.activeQuestionIndex,
-                    questionVisible: ev.questionVisible,
+                    activeQuestionIndex: ev.active_question_index,
+                    questionVisible: visible,
                 });
 
                 log("info", "question visibility changed", {
                     eventCode,
-                    visible: ev.questionVisible,
+                    visible,
                 });
             }
         );
@@ -503,7 +470,7 @@ export function registerLiveEventHandlers(io: Server) {
                     return;
                 }
 
-                const ev = await LiveEventModel.findOne({ eventCode }).exec();
+                const ev = await liveEventRepo.findByEventCode(eventCode);
                 if (!ev || ev.status !== "live") {
                     cb?.({ ok: false });
                     return;
@@ -519,50 +486,27 @@ export function registerLiveEventHandlers(io: Server) {
                     return;
                 }
 
-                const answersKey = keys.answers(eventCode, payload.questionIndex);
-                const countsKey = keys.counts(eventCode, payload.questionIndex);
+                const isCorrect = payload.optionIndex === q.correctIndex;
 
-                if (redis) {
-                    // Rate-limit: one answer per participant per question
-                    const alreadyAnswered = await redis.hexists(
-                        answersKey,
-                        payload.participantId
-                    );
-                    if (alreadyAnswered) {
-                        cb?.({ ok: false, message: "Already answered" });
-                        return;
-                    }
-
-                    // Store answer and increment count atomically
-                    await redis.hset(
-                        answersKey,
-                        payload.participantId,
-                        String(payload.optionIndex)
-                    );
-                    await redis.expire(answersKey, TTL);
-
-                    await redis.hincrby(
-                        countsKey,
-                        String(payload.optionIndex),
-                        1
-                    );
-                    await redis.expire(countsKey, TTL);
-                } else {
-                    // In-memory rate-limit fallback via MongoDB
-                    const key = String(payload.questionIndex);
-                    if (!ev.answers[key]) ev.answers[key] = {};
-                    if (ev.answers[key][payload.participantId] !== undefined) {
-                        cb?.({ ok: false, message: "Already answered" });
-                        return;
-                    }
+                // Postgres unique constraint is the atomic dedup gate — one
+                // answer per participant per question.
+                const recorded = await liveEventRepo.recordAnswer(
+                    ev.id,
+                    payload.participantId,
+                    payload.questionIndex,
+                    payload.optionIndex,
+                    isCorrect
+                );
+                if (!recorded) {
+                    cb?.({ ok: false, message: "Already answered" });
+                    return;
                 }
 
-                // Persist to MongoDB
-                const key = String(payload.questionIndex);
-                if (!ev.answers[key]) ev.answers[key] = {};
-                ev.answers[key][payload.participantId] = payload.optionIndex;
-                ev.markModified("answers");
-                await ev.save();
+                if (redis) {
+                    const countsKey = keys.counts(eventCode, payload.questionIndex);
+                    await redis.hincrby(countsKey, String(payload.optionIndex), 1);
+                    await redis.expire(countsKey, TTL);
+                }
 
                 log("info", "answer submitted", {
                     eventCode,
@@ -570,14 +514,13 @@ export function registerLiveEventHandlers(io: Server) {
                     questionIndex: payload.questionIndex,
                 });
 
-                const results = redis
-                    ? await computeResultsFromRedis(
-                          eventCode,
-                          payload.questionIndex,
-                          q.options.length,
-                          q.correctIndex
-                      )
-                    : computeResults(q, ev.answers[key]);
+                const results = await computeResults(
+                    eventCode,
+                    ev.id,
+                    payload.questionIndex,
+                    q.options.length,
+                    q.correctIndex
+                );
 
                 io.to(room(eventCode)).emit("event:results", {
                     eventCode,

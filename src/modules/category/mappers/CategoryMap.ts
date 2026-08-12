@@ -1,7 +1,13 @@
 import { Category } from "../domain/Category";
 import { CategoryName } from "../domain/valueObjects/CategoryName";
 import { CategoryDTO } from "../dtos/CategoryDTO";
-import { ICategoryDocument } from "../infra/db/CategoryModel";
+
+export interface CategoryRow {
+    id: string;
+    name: string;
+    created_at: Date;
+    updated_at: Date;
+}
 
 export class CategoryMap {
     public static toDTO(category: Category): CategoryDTO {
@@ -11,7 +17,7 @@ export class CategoryMap {
         };
     }
 
-    public static toDomain(raw: ICategoryDocument): Category {
+    public static toDomain(raw: CategoryRow): Category {
         const nameOrError = CategoryName.create(raw.name);
         if (nameOrError.isFailure) {
             throw new Error(nameOrError.errorValue());
@@ -20,16 +26,10 @@ export class CategoryMap {
         return new Category(
             {
                 name: nameOrError.getValue(),
-                createdAt: raw.createdAt,
-                updatedAt: raw.updatedAt,
+                createdAt: raw.created_at,
+                updatedAt: raw.updated_at,
             },
-            String(raw._id)
+            raw.id
         );
-    }
-
-    public static toPersistence(category: Category): any {
-        return {
-            name: category.name,
-        };
     }
 }

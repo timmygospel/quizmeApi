@@ -46,33 +46,42 @@ export class UpdateQuizUseCase implements UseCase<UpdateQuizDTO, Promise<Result<
                         }
 
                         return new Option({
-
+                            id: o.id,
                             text: optionTextOrError.getValue(),
                             correct: o.correct,
                         });
                     });
 
                     return new Question({
-
+                        id: q.id,
                         question: questionTextOrError.getValue(),
                         options,
                     });
                 });
             }
 
-            // ✅ 4. Build updated domain object
+            // ✅ 4. Map and validate sections (if provided)
+            let sections = existingQuiz.sections;
+            if (dto.sections) {
+                sections = dto.sections
+                    .filter((s) => s.name && s.name.trim().length > 0)
+                    .map((s) => ({ id: s.id, name: s.name.trim(), questionIds: s.questionIds ?? [] }));
+            }
+
+            // ✅ 5. Build updated domain object
             const updatedQuiz = new Quiz({
                 id: existingQuiz.id,
                 title,
                 questions,
+                sections,
                 createdAt: existingQuiz.createdAt,
                 updatedAt: new Date(),
             });
 
-            // ✅ 5. Persist update
+            // ✅ 6. Persist update
             const savedQuiz = await this.quizRepo.save(updatedQuiz);
 
-            // ✅ 6. Return success
+            // ✅ 7. Return success
             return Result.ok(savedQuiz);
         } catch (error: any) {
             return Result.fail(`Failed to update quiz: ${error.message ?? error}`);

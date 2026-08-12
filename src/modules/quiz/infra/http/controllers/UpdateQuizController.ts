@@ -1,6 +1,7 @@
 import { BaseController } from "../../../../../shared/core/BaseController";
 import { UpdateQuizUseCase } from "../../../application/useCases/updateQuiz/UpdateQuizUseCase";
 import { UpdateQuizDTO } from "../../../application/useCases/updateQuiz/UpdateQuizDTO";
+import { QuizMap } from "../../../mappers/QuizMap";
 
 export class UpdateQuizController extends BaseController {
     constructor(private useCase: UpdateQuizUseCase) {
@@ -21,7 +22,7 @@ export class UpdateQuizController extends BaseController {
                 return this.fail(result.errorValue());
             }
 
-            return this.ok(result.getValue());
+            return this.ok(QuizMap.toDTO(result.getValue()));
         } catch (err) {
             return this.fail(err);
         }
