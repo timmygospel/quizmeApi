@@ -31,7 +31,11 @@ export abstract class BaseController {
         }
     }
 
-    public created() {
+    public created<T>(dto?: T) {
+        if (dto) {
+            this.res.type("application/json");
+            return this.res.status(201).json(dto);
+        }
         return this.res.sendStatus(201);
     }
 

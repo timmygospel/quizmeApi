@@ -19,6 +19,7 @@ export interface UserDTO {
     department: OrgRefDTO | null;
     location: OrgRefDTO | null;
     lastLoginAt: string | null;
+    invitationSentAt: string | null;
     createdAt?: string;
     updatedAt?: string;
 }

@@ -21,6 +21,7 @@ export interface UserProps {
     location: OrgRef | null;
     roles: UserRoleRef[];
     lastLoginAt: Date | null;
+    invitationSentAt: Date | null;
     createdAt?: Date;
     updatedAt?: Date;
 }
@@ -68,6 +69,10 @@ export class User {
 
     get lastLoginAt(): Date | null {
         return this.props.lastLoginAt;
+    }
+
+    get invitationSentAt(): Date | null {
+        return this.props.invitationSentAt;
     }
 
     get createdAt(): Date | undefined {

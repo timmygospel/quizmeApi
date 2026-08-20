@@ -8,6 +8,8 @@ function baseRow(overrides: Partial<RoleRow> = {}): RoleRow {
         description: "Monitors assigned teams and manages their training.",
         type: "SYSTEM",
         user_count: "84",
+        permission_codes: null,
+        archived_at: null,
         created_at: new Date("2026-01-01T00:00:00Z"),
         updated_at: new Date("2026-01-01T00:00:00Z"),
         ...overrides,
@@ -42,6 +44,8 @@ describe("RoleMap.toDTO", () => {
             description: "Monitors assigned teams and manages their training.",
             type: "SYSTEM",
             userCount: 84,
+            permissions: [],
+            archivedAt: null,
             createdAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
         });

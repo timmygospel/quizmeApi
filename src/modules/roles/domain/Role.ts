@@ -6,6 +6,8 @@ export interface RoleProps {
     description: string;
     type: RoleType;
     userCount: number;
+    permissions: string[];
+    archivedAt: Date | null;
     createdAt?: Date;
     updatedAt?: Date;
 }
@@ -37,6 +39,14 @@ export class Role {
 
     get userCount(): number {
         return this.props.userCount;
+    }
+
+    get permissions(): string[] {
+        return this.props.permissions;
+    }
+
+    get archivedAt(): Date | null {
+        return this.props.archivedAt;
     }
 
     get createdAt(): Date | undefined {

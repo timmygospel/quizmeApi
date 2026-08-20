@@ -232,9 +232,15 @@ CREATE TABLE IF NOT EXISTS roles (
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     type TEXT NOT NULL DEFAULT 'SYSTEM' CHECK (type IN ('SYSTEM', 'CUSTOM')),
+    archived_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Sprint 1/3 shipped without this column; ALTER (rather than relying on the
+-- CREATE TABLE IF NOT EXISTS above) so it reaches databases that already
+-- migrated the table.
+ALTER TABLE roles ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 
 INSERT INTO roles (code, name, description, type) VALUES
     ('ADMINISTRATOR', 'Administrator', 'Manages users, access and permissions across the organisation.', 'SYSTEM'),
@@ -245,6 +251,59 @@ INSERT INTO roles (code, name, description, type) VALUES
     ('PARTICIPANT', 'Participant', 'Completes assigned training and views their own results.', 'SYSTEM')
 ON CONFLICT (code) DO NOTHING;
 
+-- Sprint 4 — Roles: mutation, archive, and the permission catalogue per
+-- USERS_ROLES.md §32-33/§40. The catalogue below is the doc's explicit
+-- "Initial catalogue" (§40); the finer-grained content permissions used as
+-- illustrative UI copy elsewhere in the doc (question.read, etc.) aren't
+-- wired to real enforcement anywhere yet, so they're left for when those
+-- modules actually need gating.
+CREATE TABLE IF NOT EXISTS permissions (
+    code TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL
+);
+
+INSERT INTO permissions (code, name, description, category) VALUES
+    ('user.read', 'View users', 'View user profiles and their role assignments.', 'Users'),
+    ('user.invite', 'Invite users', 'Invite new users to the organisation.', 'Users'),
+    ('user.edit', 'Edit users', 'Edit user details and organisational assignment.', 'Users'),
+    ('user.suspend', 'Suspend users', 'Suspend an active user''s access.', 'Users'),
+    ('user.archive', 'Archive users', 'Archive a user and remove them from active lists.', 'Users'),
+    ('role.read', 'View roles', 'View roles and their permissions.', 'Roles'),
+    ('role.create', 'Create roles', 'Create new custom roles.', 'Roles'),
+    ('role.edit', 'Edit roles', 'Edit a role''s details and permissions.', 'Roles'),
+    ('role.archive', 'Archive roles', 'Archive a custom role.', 'Roles'),
+    ('role.assign', 'Assign roles', 'Assign roles to users.', 'Roles'),
+    ('permission.read', 'View permissions', 'View the organisation''s permission catalogue.', 'Roles'),
+    ('organisation.membership.manage', 'Manage organisation membership', 'Manage who belongs to the organisation.', 'Organisation')
+ON CONFLICT (code) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+    role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    permission_code TEXT NOT NULL REFERENCES permissions(code) ON DELETE CASCADE,
+    PRIMARY KEY (role_id, permission_code)
+);
+
+-- Starter grants for the seeded system roles. Approximate — USERS_ROLES.md
+-- describes each role's responsibilities in prose (§2 Administrator can
+-- manage users/roles/permissions; §67-77 Executive is read-only; §44-55
+-- Manager should not manage global roles) but never gives an exact
+-- permission-to-role mapping, so this is a reasonable starting grant rather
+-- than a value taken directly from the doc.
+INSERT INTO role_permissions (role_id, permission_code)
+SELECT r.id, p.code FROM roles r, permissions p WHERE r.code = 'ADMINISTRATOR'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_code)
+SELECT r.id, code FROM roles r, unnest(ARRAY['user.read', 'role.read', 'permission.read']) AS code
+WHERE r.code = 'EXECUTIVE'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_code)
+SELECT r.id, 'user.read' FROM roles r WHERE r.code = 'MANAGER'
+ON CONFLICT DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     first_name TEXT NOT NULL,
@@ -253,14 +312,51 @@ CREATE TABLE IF NOT EXISTS users (
     status TEXT NOT NULL DEFAULT 'INVITED' CHECK (status IN ('INVITED', 'ACTIVE', 'SUSPENDED', 'ARCHIVED')),
     department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
     location_id UUID REFERENCES locations(id) ON DELETE SET NULL,
+    invitation_sent_at TIMESTAMPTZ,
     last_login_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Sprint 1 shipped without this column; ALTER (rather than relying on the
+-- CREATE TABLE IF NOT EXISTS above) so it reaches databases that already
+-- migrated the table.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS invitation_sent_at TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS user_roles (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role_id UUID NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+    all_locations BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (user_id, role_id)
+);
+
+-- Sprint 1 shipped without this column; ALTER (rather than relying on the
+-- CREATE TABLE IF NOT EXISTS above) so it reaches databases that already
+-- migrated the table.
+ALTER TABLE user_roles ADD COLUMN IF NOT EXISTS all_locations BOOLEAN NOT NULL DEFAULT false;
+
+-- Sprint 5 — Scoped Access. A role assignment's scope is either "all
+-- locations" (user_roles.all_locations) or a set of specific
+-- locations/departments below. Team scope is intentionally not modelled —
+-- this codebase has no team entity anywhere, and USERS_ROLES.md's own
+-- closing rule says the absence of teams must never block department-level
+-- assignment. Administrator and Executive are always organisation-wide
+-- (§2) regardless of any rows here — see roles/domain/orgWideRoles.ts;
+-- assigning either of them with a non-empty scope is rejected at the use
+-- case level.
+CREATE TABLE IF NOT EXISTS user_role_locations (
+    user_id UUID NOT NULL,
+    role_id UUID NOT NULL,
+    location_id UUID NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, role_id, location_id),
+    FOREIGN KEY (user_id, role_id) REFERENCES user_roles(user_id, role_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS user_role_departments (
+    user_id UUID NOT NULL,
+    role_id UUID NOT NULL,
+    department_id UUID NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, role_id, department_id),
+    FOREIGN KEY (user_id, role_id) REFERENCES user_roles(user_id, role_id) ON DELETE CASCADE
 );

@@ -9,6 +9,7 @@ export interface UserRow {
     email: string;
     status: string;
     last_login_at: Date | null;
+    invitation_sent_at: Date | null;
     created_at: Date;
     updated_at: Date;
     department_id: string | null;
@@ -31,6 +32,7 @@ export class UserMap {
             department: user.department,
             location: user.location,
             lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
+            invitationSentAt: user.invitationSentAt ? user.invitationSentAt.toISOString() : null,
             createdAt: user.createdAt?.toISOString(),
             updatedAt: user.updatedAt?.toISOString(),
         };
@@ -56,6 +58,7 @@ export class UserMap {
                     : null,
                 roles: row.roles ?? [],
                 lastLoginAt: row.last_login_at,
+                invitationSentAt: row.invitation_sent_at,
                 createdAt: row.created_at,
                 updatedAt: row.updated_at,
             },

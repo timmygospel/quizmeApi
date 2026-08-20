@@ -4,10 +4,19 @@ import { IUserRepository, UserListFilters, UserListResult } from "../../../domai
 function makeRepo(result: UserListResult, capture: { filters?: UserListFilters } = {}): IUserRepository {
     return {
         findById: jest.fn(),
+        findByEmail: jest.fn(),
         findAll: jest.fn(async (filters: UserListFilters) => {
             capture.filters = filters;
             return result;
         }),
+        create: jest.fn(),
+        markInvitationSent: jest.fn(),
+        updateStatus: jest.fn(),
+        isSoleActiveAdministrator: jest.fn(),
+        hasRole: jest.fn(),
+        assignRole: jest.fn(),
+        removeRole: jest.fn(),
+        findEffectiveAccess: jest.fn(),
     };
 }
 
@@ -66,7 +75,16 @@ describe("GetAllUsersUseCase", () => {
     it("returns a failure Result when the repository throws", async () => {
         const repo: IUserRepository = {
             findById: jest.fn(),
+            findByEmail: jest.fn(),
             findAll: jest.fn().mockRejectedValue(new Error("connection lost")),
+            create: jest.fn(),
+            markInvitationSent: jest.fn(),
+            updateStatus: jest.fn(),
+            isSoleActiveAdministrator: jest.fn(),
+            hasRole: jest.fn(),
+            assignRole: jest.fn(),
+            removeRole: jest.fn(),
+            findEffectiveAccess: jest.fn(),
         };
         const useCase = new GetAllUsersUseCase(repo);
 

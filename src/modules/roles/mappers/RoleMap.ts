@@ -8,6 +8,8 @@ export interface RoleRow {
     description: string;
     type: string;
     user_count: string; // COUNT(*) comes back as text over the wire
+    permission_codes: string[] | null;
+    archived_at: Date | null;
     created_at: Date;
     updated_at: Date;
 }
@@ -21,6 +23,8 @@ export class RoleMap {
             description: role.description,
             type: role.type,
             userCount: role.userCount,
+            permissions: role.permissions,
+            archivedAt: role.archivedAt ? role.archivedAt.toISOString() : null,
             createdAt: role.createdAt?.toISOString(),
             updatedAt: role.updatedAt?.toISOString(),
         };
@@ -34,6 +38,8 @@ export class RoleMap {
                 description: row.description,
                 type: row.type as RoleType,
                 userCount: parseInt(row.user_count, 10),
+                permissions: row.permission_codes ?? [],
+                archivedAt: row.archived_at,
                 createdAt: row.created_at,
                 updatedAt: row.updated_at,
             },
