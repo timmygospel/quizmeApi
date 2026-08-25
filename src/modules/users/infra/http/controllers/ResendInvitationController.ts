@@ -9,7 +9,7 @@ export class ResendInvitationController extends BaseController {
 
     protected async executeImpl(): Promise<void> {
         const id = String(this.req.params.id);
-        const result = await this.useCase.execute(id);
+        const result = await this.useCase.execute(id, this.req.effectiveScope);
 
         if (result.isFailure) {
             const error = result.errorValue();

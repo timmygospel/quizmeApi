@@ -11,7 +11,7 @@ export class GetSessionController extends BaseController {
         try {
             const id = String(this.req.params.id);
 
-            const result = await this.useCase.execute(id);
+            const result = await this.useCase.execute(id, this.req.effectiveScope);
 
             if (result.isFailure) {
                 this.notFound(result.errorValue());

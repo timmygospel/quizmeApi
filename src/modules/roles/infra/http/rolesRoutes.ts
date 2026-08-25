@@ -1,6 +1,7 @@
 import express from "express";
 
 import { PgRoleRepository } from "../db/PgRoleRepository";
+import { PgUserRepository } from "../../../users/infra/db/PgUserRepository";
 import { GetAllRolesUseCase } from "../../application/useCases/getAllRoles/GetAllRolesUseCase";
 import { GetRoleUseCase } from "../../application/useCases/getRole/GetRoleUseCase";
 import { CreateRoleUseCase } from "../../application/useCases/createRole/CreateRoleUseCase";
@@ -17,9 +18,19 @@ import { ArchiveRoleController } from "./controllers/ArchiveRoleController";
 import { GetAllPermissionsController } from "./controllers/GetAllPermissionsController";
 import { GetRolePermissionsController } from "./controllers/GetRolePermissionsController";
 import { SetRolePermissionsController } from "./controllers/SetRolePermissionsController";
+import {
+    requireAuthenticatedUser,
+    createRequirePermission,
+    createApplyEffectiveScope,
+} from "../../../../shared/infra/http/authorizationMiddleware";
 
 const router = express.Router();
 const repo = new PgRoleRepository();
+const userRepo = new PgUserRepository();
+
+// PERMISSIONS.md §11 pipeline — see userRoutes.ts for the same wiring.
+const requirePermission = createRequirePermission(userRepo, repo);
+const applyEffectiveScope = createApplyEffectiveScope(userRepo, repo);
 
 const getAllRolesUseCase = new GetAllRolesUseCase(repo);
 const getRoleUseCase = new GetRoleUseCase(repo);
@@ -39,14 +50,62 @@ const getAllPermissionsController = new GetAllPermissionsController(getAllPermis
 const getRolePermissionsController = new GetRolePermissionsController(getRolePermissionsUseCase);
 const setRolePermissionsController = new SetRolePermissionsController(setRolePermissionsUseCase);
 
-router.get("/permissions", (req, res) => getAllPermissionsController.execute(req, res));
+router.get(
+    "/permissions",
+    requireAuthenticatedUser,
+    requirePermission("role.read"),
+    applyEffectiveScope,
+    (req, res) => getAllPermissionsController.execute(req, res)
+);
 
-router.get("/roles", (req, res) => getAllRolesController.execute(req, res));
-router.post("/roles", (req, res) => createRoleController.execute(req, res));
-router.get("/roles/:id", (req, res) => getRoleController.execute(req, res));
-router.patch("/roles/:id", (req, res) => updateRoleController.execute(req, res));
-router.post("/roles/:id/archive", (req, res) => archiveRoleController.execute(req, res));
-router.get("/roles/:id/permissions", (req, res) => getRolePermissionsController.execute(req, res));
-router.put("/roles/:id/permissions", (req, res) => setRolePermissionsController.execute(req, res));
+router.get(
+    "/roles",
+    requireAuthenticatedUser,
+    requirePermission("role.read"),
+    applyEffectiveScope,
+    (req, res) => getAllRolesController.execute(req, res)
+);
+router.post(
+    "/roles",
+    requireAuthenticatedUser,
+    requirePermission("role.create"),
+    applyEffectiveScope,
+    (req, res) => createRoleController.execute(req, res)
+);
+router.get(
+    "/roles/:id",
+    requireAuthenticatedUser,
+    requirePermission("role.read"),
+    applyEffectiveScope,
+    (req, res) => getRoleController.execute(req, res)
+);
+router.patch(
+    "/roles/:id",
+    requireAuthenticatedUser,
+    requirePermission("role.edit"),
+    applyEffectiveScope,
+    (req, res) => updateRoleController.execute(req, res)
+);
+router.post(
+    "/roles/:id/archive",
+    requireAuthenticatedUser,
+    requirePermission("role.archive"),
+    applyEffectiveScope,
+    (req, res) => archiveRoleController.execute(req, res)
+);
+router.get(
+    "/roles/:id/permissions",
+    requireAuthenticatedUser,
+    requirePermission("role.read"),
+    applyEffectiveScope,
+    (req, res) => getRolePermissionsController.execute(req, res)
+);
+router.put(
+    "/roles/:id/permissions",
+    requireAuthenticatedUser,
+    requirePermission("role.edit"),
+    applyEffectiveScope,
+    (req, res) => setRolePermissionsController.execute(req, res)
+);
 
 export default router;

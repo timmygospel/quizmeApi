@@ -5,8 +5,9 @@ import { IRoleRepository } from "../../../../roles/domain/IRoleRepository";
 import { IDepartmentRepository } from "../../../../department/domain/IDepartmentRepository";
 import { ILocationRepository } from "../../../../location/domain/ILocationRepository";
 import { Role } from "../../../../roles/domain/Role";
+import { EffectiveScope } from "../../../../../shared/core/EffectiveScope";
 
-function makeUser(status: User["status"] = "ACTIVE"): User {
+function makeUser(status: User["status"] = "ACTIVE", locationId: string | null = null): User {
     return new User(
         {
             firstName: "Sarah",
@@ -14,7 +15,7 @@ function makeUser(status: User["status"] = "ACTIVE"): User {
             email: { value: "sarah@example.com" } as any,
             status,
             department: null,
-            location: null,
+            location: locationId ? { id: locationId, name: "Birmingham" } : null,
             roles: [],
             lastLoginAt: null,
             invitationSentAt: null,
@@ -43,6 +44,9 @@ function makeUserRepo(overrides: Partial<IUserRepository> = {}): IUserRepository
         assignRole: jest.fn(),
         removeRole: jest.fn(),
         findEffectiveAccess: jest.fn().mockResolvedValue([] as AssignedRoleScope[]),
+        findByAuthProviderUserId: jest.fn(),
+        linkAuthProviderIdentity: jest.fn(),
+        touchLastLogin: jest.fn(),
         ...overrides,
     };
 }
@@ -107,6 +111,18 @@ describe("AssignUserRoleUseCase", () => {
 
         expect(result.isFailure).toBe(true);
         expect(result.errorValue()).toBe("USER_NOT_FOUND");
+    });
+
+    it("fails with USER_NOT_FOUND when the target user exists but is outside the caller's scope", async () => {
+        const userRepo = makeUserRepo({ findById: jest.fn().mockResolvedValue(makeUser("ACTIVE", "loc-2")) });
+        const useCase = new AssignUserRoleUseCase(userRepo, makeRoleRepo(), makeDepartmentRepo(), makeLocationRepo());
+        const scope: EffectiveScope = { type: "SCOPED", userId: "caller", allLocations: false, locationIds: ["loc-1"], departmentIds: [] };
+
+        const result = await useCase.execute({ userId: "user-1", roleId: "role-1", allLocations: true }, scope);
+
+        expect(result.isFailure).toBe(true);
+        expect(result.errorValue()).toBe("USER_NOT_FOUND");
+        expect(userRepo.assignRole).not.toHaveBeenCalled();
     });
 
     it("refuses to assign new roles to an archived user", async () => {

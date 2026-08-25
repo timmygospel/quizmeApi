@@ -2,12 +2,31 @@ import express from "express";
 import crypto from "crypto";
 import { PgLiveEventRepository } from "../db/PgLiveEventRepository";
 import { generateEventCode } from "../../../../shared/core/shortCode";
+import { PgUserRepository } from "../../../users/infra/db/PgUserRepository";
+import { PgRoleRepository } from "../../../roles/infra/db/PgRoleRepository";
+import {
+    requireAuthenticatedUser,
+    createRequirePermission,
+    createApplyEffectiveScope,
+} from "../../../../shared/infra/http/authorizationMiddleware";
 
 const router = express.Router();
 const liveEventRepo = new PgLiveEventRepository();
+const userRepo = new PgUserRepository();
+const roleRepo = new PgRoleRepository();
+
+// PERMISSIONS.md §11 pipeline — only for creating an event (§10
+// session.host: "Host a live training session"). GET /live-events/:eventCode
+// stays deliberately open: it's how a participant's browser polls event
+// state after joining via event code, with no org login involved. The
+// /end route keeps its existing adminToken check as its own, separate,
+// intentional auth mechanism (CLAUDE.md: "admin-token authenticated") rather
+// than layering the permission system on top of it.
+const requirePermission = createRequirePermission(userRepo, roleRepo);
+const applyEffectiveScope = createApplyEffectiveScope(userRepo, roleRepo);
 
 // POST /api/v1/live-events
-router.post("/live-events", async (req, res) => {
+router.post("/live-events", requireAuthenticatedUser, requirePermission("session.host"), applyEffectiveScope, async (req, res) => {
     const { quizId, name, sessionId } = req.body ?? {};
     const trimmedName = String(name ?? "").trim();
     const trimmedQuizId = String(quizId ?? "").trim();

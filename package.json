@@ -8,18 +8,21 @@
     "predev": "docker compose up -d --wait",
     "dev": "ts-node-dev --respawn --transpile-only --no-notify src/server.ts",
     "start": "node dist/server.js",
+    "prestart:watch": "docker compose up -d --wait",
+    "start:watch": "nodemon --watch src --ext ts --exec \"npm run build && node dist/server.js\"",
     "lint": "eslint . --ext .ts,.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "db:migrate": "ts-node src/shared/infra/postgres/migrate.ts"
+    "db:migrate": "ts-node src/shared/infra/postgres/migrate.ts",
+    "bootstrap:admin": "ts-node src/shared/infra/postgres/bootstrapAdmin.ts"
   },
   "dependencies": {
+    "@clerk/backend": "^3.16.9",
     "@socket.io/redis-adapter": "^8.3.0",
     "cors": "^2.8.6",
     "dotenv": "^16.0.0",
     "express": "^4.18.2",
     "ioredis": "^5.9.3",
-    "nodeman": "^1.1.2",
     "pg": "^8.22.0",
     "socket.io": "^4.8.3"
   },

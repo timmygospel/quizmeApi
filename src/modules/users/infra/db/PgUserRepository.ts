@@ -9,6 +9,38 @@ import {
 import { User, UserStatus } from "../../domain/User";
 import { UserMap, UserRow } from "../../mappers/UserMap";
 import { pgPool } from "../../../../shared/infra/postgres/pgClient";
+import { EffectiveScope } from "../../../../shared/core/EffectiveScope";
+
+// PERMISSIONS.md §3 scope enforcement for a `users` list query. Pure (given
+// the same `params` array reference to push onto, for $n numbering to stay
+// consistent with whatever conditions were built before it) so it's unit
+// testable without a database — see PgUserRepository.test.ts.
+//
+// ORGANISATION applies no restriction. SELF restricts to the caller's own
+// row. SCOPED restricts to the union of the caller's role scopes: location
+// is unrestricted when allLocations is set or no role granted specific
+// locations, department is unrestricted when no role granted specific
+// departments — both conditions apply (AND) when both are present, since
+// locations and departments are independent axes on a user row, not nested.
+export function buildScopeConditions(scope: EffectiveScope | undefined, params: unknown[]): string[] {
+    if (!scope || scope.type === "ORGANISATION") return [];
+
+    if (scope.type === "SELF") {
+        params.push(scope.userId);
+        return [`u.id = $${params.length}`];
+    }
+
+    const conditions: string[] = [];
+    if (!scope.allLocations && scope.locationIds.length > 0) {
+        params.push(scope.locationIds);
+        conditions.push(`u.location_id = ANY($${params.length})`);
+    }
+    if (scope.departmentIds.length > 0) {
+        params.push(scope.departmentIds);
+        conditions.push(`u.department_id = ANY($${params.length})`);
+    }
+    return conditions;
+}
 
 const BASE_SELECT = `
     SELECT
@@ -66,6 +98,7 @@ export class PgUserRepository implements IUserRepository {
                 `EXISTS (SELECT 1 FROM user_roles ur2 WHERE ur2.user_id = u.id AND ur2.role_id = $${params.length})`
             );
         }
+        conditions.push(...buildScopeConditions(filters.scope, params));
 
         const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -265,5 +298,24 @@ export class PgUserRepository implements IUserRepository {
             locations: row.locations ?? [],
             departments: row.departments ?? [],
         }));
+    }
+
+    async findByAuthProviderUserId(provider: string, providerUserId: string): Promise<User | null> {
+        const { rows } = await pgPool.query<UserRow>(
+            `${BASE_SELECT} WHERE u.auth_provider = $1 AND u.auth_provider_user_id = $2`,
+            [provider, providerUserId]
+        );
+        return rows[0] ? UserMap.toDomain(rows[0]) : null;
+    }
+
+    async linkAuthProviderIdentity(userId: string, provider: string, providerUserId: string): Promise<void> {
+        await pgPool.query(
+            `UPDATE users SET auth_provider = $2, auth_provider_user_id = $3, updated_at = now() WHERE id = $1`,
+            [userId, provider, providerUserId]
+        );
+    }
+
+    async touchLastLogin(id: string): Promise<void> {
+        await pgPool.query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [id]);
     }
 }

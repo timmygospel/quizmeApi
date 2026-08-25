@@ -6,6 +6,8 @@ import { ILocationRepository } from "../../../../location/domain/ILocationReposi
 import { isOrgWideRole } from "../../../../roles/domain/orgWideRoles";
 import { EffectiveAccessDTO } from "../../../dtos/EffectiveAccessDTO";
 import { buildEffectiveAccess } from "../shared/buildEffectiveAccess";
+import { isUserWithinScope } from "../../../domain/userInScope";
+import { EffectiveScope } from "../../../../../shared/core/EffectiveScope";
 import { AssignUserRoleDTO } from "./AssignUserRoleDTO";
 
 export class AssignUserRoleUseCase {
@@ -16,10 +18,10 @@ export class AssignUserRoleUseCase {
         private locationRepo: ILocationRepository
     ) { }
 
-    async execute(dto: AssignUserRoleDTO): Promise<Result<EffectiveAccessDTO>> {
+    async execute(dto: AssignUserRoleDTO, scope?: EffectiveScope): Promise<Result<EffectiveAccessDTO>> {
         try {
             const user = await this.userRepo.findById(dto.userId);
-            if (!user) return Result.fail("USER_NOT_FOUND");
+            if (!user || !isUserWithinScope(user, scope)) return Result.fail("USER_NOT_FOUND");
             if (user.status === "ARCHIVED") return Result.fail("USER_ARCHIVED");
 
             const role = await this.roleRepo.findById(dto.roleId);

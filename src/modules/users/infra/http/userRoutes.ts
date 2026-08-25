@@ -24,10 +24,23 @@ import { ArchiveUserController } from "./controllers/ArchiveUserController";
 import { AssignUserRoleController } from "./controllers/AssignUserRoleController";
 import { RemoveUserRoleController } from "./controllers/RemoveUserRoleController";
 import { GetUserEffectiveAccessController } from "./controllers/GetUserEffectiveAccessController";
+import {
+    requireAuthenticatedUser,
+    createRequirePermission,
+    createApplyEffectiveScope,
+} from "../../../../shared/infra/http/authorizationMiddleware";
 
 const router = express.Router();
 const repo = new PgUserRepository();
 const roleRepo = new PgRoleRepository();
+
+// PERMISSIONS.md §11 pipeline: requireAuthenticatedUser -> requirePermission
+// -> applyEffectiveScope -> controller. Permission codes are the §10
+// catalogue; resource-by-ID scope verification (e.g. "is :id within my
+// effective scope") is not yet enforced here — applyEffectiveScope only
+// resolves req.effectiveScope for a controller/use case to apply.
+const requirePermission = createRequirePermission(repo, roleRepo);
+const applyEffectiveScope = createApplyEffectiveScope(repo, roleRepo);
 const departmentRepo = new PgDepartmentRepository();
 const locationRepo = new PgLocationRepository();
 
@@ -53,15 +66,75 @@ const assignUserRoleController = new AssignUserRoleController(assignUserRoleUseC
 const removeUserRoleController = new RemoveUserRoleController(removeUserRoleUseCase);
 const getUserEffectiveAccessController = new GetUserEffectiveAccessController(getUserEffectiveAccessUseCase);
 
-router.get("/users", (req, res) => getAllUsersController.execute(req, res));
-router.post("/users/invitations", (req, res) => inviteUserController.execute(req, res));
-router.get("/users/:id", (req, res) => getUserController.execute(req, res));
-router.post("/users/:id/resend-invitation", (req, res) => resendInvitationController.execute(req, res));
-router.post("/users/:id/activate", (req, res) => activateUserController.execute(req, res));
-router.post("/users/:id/suspend", (req, res) => suspendUserController.execute(req, res));
-router.post("/users/:id/archive", (req, res) => archiveUserController.execute(req, res));
-router.get("/users/:id/effective-access", (req, res) => getUserEffectiveAccessController.execute(req, res));
-router.post("/users/:id/roles", (req, res) => assignUserRoleController.execute(req, res));
-router.delete("/users/:id/roles/:roleId", (req, res) => removeUserRoleController.execute(req, res));
+router.get(
+    "/users",
+    requireAuthenticatedUser,
+    requirePermission("user.read"),
+    applyEffectiveScope,
+    (req, res) => getAllUsersController.execute(req, res)
+);
+router.post(
+    "/users/invitations",
+    requireAuthenticatedUser,
+    requirePermission("user.invite"),
+    applyEffectiveScope,
+    (req, res) => inviteUserController.execute(req, res)
+);
+router.get(
+    "/users/:id",
+    requireAuthenticatedUser,
+    requirePermission("user.read"),
+    applyEffectiveScope,
+    (req, res) => getUserController.execute(req, res)
+);
+router.post(
+    "/users/:id/resend-invitation",
+    requireAuthenticatedUser,
+    requirePermission("user.invite"),
+    applyEffectiveScope,
+    (req, res) => resendInvitationController.execute(req, res)
+);
+router.post(
+    "/users/:id/activate",
+    requireAuthenticatedUser,
+    requirePermission("user.edit"),
+    applyEffectiveScope,
+    (req, res) => activateUserController.execute(req, res)
+);
+router.post(
+    "/users/:id/suspend",
+    requireAuthenticatedUser,
+    requirePermission("user.suspend"),
+    applyEffectiveScope,
+    (req, res) => suspendUserController.execute(req, res)
+);
+router.post(
+    "/users/:id/archive",
+    requireAuthenticatedUser,
+    requirePermission("user.archive"),
+    applyEffectiveScope,
+    (req, res) => archiveUserController.execute(req, res)
+);
+router.get(
+    "/users/:id/effective-access",
+    requireAuthenticatedUser,
+    requirePermission("user.read"),
+    applyEffectiveScope,
+    (req, res) => getUserEffectiveAccessController.execute(req, res)
+);
+router.post(
+    "/users/:id/roles",
+    requireAuthenticatedUser,
+    requirePermission("role.assign"),
+    applyEffectiveScope,
+    (req, res) => assignUserRoleController.execute(req, res)
+);
+router.delete(
+    "/users/:id/roles/:roleId",
+    requireAuthenticatedUser,
+    requirePermission("role.assign"),
+    applyEffectiveScope,
+    (req, res) => removeUserRoleController.execute(req, res)
+);
 
 export default router;

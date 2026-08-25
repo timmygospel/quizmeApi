@@ -33,31 +33,35 @@ export class UpdateQuizUseCase implements UseCase<UpdateQuizDTO, Promise<Result<
             // ✅ 3. Map and validate questions (if provided)
             let questions = existingQuiz.questions;
             if (dto.questions) {
-                questions = dto.questions.map((q) => {
-                    const questionTextOrError = QuestionText.create(q.question);
-                    if (questionTextOrError.isFailure) {
-                        throw new Error(questionTextOrError.errorValue());
-                    }
-
-                    const options = q.options.map((o) => {
-                        const optionTextOrError = OptionText.create(o.text);
-                        if (optionTextOrError.isFailure) {
-                            throw new Error(optionTextOrError.errorValue());
+                questions = dto.questions
+                    .filter((q) => q.question && q.question.trim().length > 0)
+                    .map((q) => {
+                        const questionTextOrError = QuestionText.create(q.question);
+                        if (questionTextOrError.isFailure) {
+                            throw new Error(questionTextOrError.errorValue());
                         }
 
-                        return new Option({
-                            id: o.id,
-                            text: optionTextOrError.getValue(),
-                            correct: o.correct,
+                        const options = q.options
+                            .filter((o) => o.text && o.text.trim().length > 0)
+                            .map((o) => {
+                                const optionTextOrError = OptionText.create(o.text);
+                                if (optionTextOrError.isFailure) {
+                                    throw new Error(optionTextOrError.errorValue());
+                                }
+
+                                return new Option({
+                                    id: o.id,
+                                    text: optionTextOrError.getValue(),
+                                    correct: o.correct,
+                                });
+                            });
+
+                        return new Question({
+                            id: q.id,
+                            question: questionTextOrError.getValue(),
+                            options,
                         });
                     });
-
-                    return new Question({
-                        id: q.id,
-                        question: questionTextOrError.getValue(),
-                        options,
-                    });
-                });
             }
 
             // ✅ 4. Map and validate sections (if provided)

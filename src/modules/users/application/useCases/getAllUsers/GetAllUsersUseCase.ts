@@ -30,6 +30,7 @@ export class GetAllUsersUseCase {
                 departmentId: request.departmentId,
                 locationId: request.locationId,
                 status: request.status,
+                scope: request.scope,
                 page,
                 pageSize,
             });

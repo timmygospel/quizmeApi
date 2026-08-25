@@ -7,14 +7,15 @@ import {
     TrainingTemplateDTO,
     TrendsResponseDTO,
 } from "../dtos/AnalyticsDTO";
+import { EffectiveScope } from "../../../shared/core/EffectiveScope";
 
 export interface IAnalyticsRepository {
-    getTrainingTemplates(): Promise<TrainingTemplateDTO[]>;
-    getSessions(trainingTemplateId?: string): Promise<AnalyticsSessionDTO[]>;
-    getSessionSummary(sessionId: string): Promise<SessionSummaryAnalyticsDTO | null>;
-    getSessionAlerts(sessionId: string): Promise<AlertsResponseDTO>;
-    getTopProblems(sessionId: string): Promise<TopProblemsResponseDTO>;
-    compareByDepartment(sessionId: string): Promise<ComparisonResponseDTO>;
-    compareByLocation(sessionId: string): Promise<ComparisonResponseDTO>;
-    getTrends(trainingTemplateId: string): Promise<TrendsResponseDTO>;
+    getTrainingTemplates(scope?: EffectiveScope): Promise<TrainingTemplateDTO[]>;
+    getSessions(trainingTemplateId?: string, scope?: EffectiveScope): Promise<AnalyticsSessionDTO[]>;
+    getSessionSummary(sessionId: string, scope?: EffectiveScope): Promise<SessionSummaryAnalyticsDTO | null>;
+    getSessionAlerts(sessionId: string, scope?: EffectiveScope): Promise<AlertsResponseDTO>;
+    getTopProblems(sessionId: string, scope?: EffectiveScope): Promise<TopProblemsResponseDTO>;
+    compareByDepartment(sessionId: string, scope?: EffectiveScope): Promise<ComparisonResponseDTO>;
+    compareByLocation(sessionId: string, scope?: EffectiveScope): Promise<ComparisonResponseDTO>;
+    getTrends(trainingTemplateId: string, scope?: EffectiveScope): Promise<TrendsResponseDTO>;
 }

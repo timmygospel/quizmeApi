@@ -9,9 +9,25 @@ import { CreateDepartmentController } from "./controllers/CreateDepartmentContro
 import { GetAllDepartmentsController } from "./controllers/GetAllDepartmentsController";
 import { UpdateDepartmentController } from "./controllers/UpdateDepartmentController";
 import { DeleteDepartmentController } from "./controllers/DeleteDepartmentController";
+import { PgUserRepository } from "../../../users/infra/db/PgUserRepository";
+import { PgRoleRepository } from "../../../roles/infra/db/PgRoleRepository";
+import {
+    requireAuthenticatedUser,
+    createRequirePermission,
+    createApplyEffectiveScope,
+} from "../../../../shared/infra/http/authorizationMiddleware";
 
 const router = express.Router();
 const repo = new PgDepartmentRepository();
+const userRepo = new PgUserRepository();
+const roleRepo = new PgRoleRepository();
+
+// PERMISSIONS.md §11 pipeline. Departments are organisational structure
+// (§3's Organisation -> Location -> Department hierarchy), gated with the
+// §10 settings.* codes rather than a dedicated department.* code (none
+// exists in the catalogue).
+const requirePermission = createRequirePermission(userRepo, roleRepo);
+const applyEffectiveScope = createApplyEffectiveScope(userRepo, roleRepo);
 
 const createDepartmentUseCase = new CreateDepartmentUseCase(repo);
 const getAllDepartmentsUseCase = new GetAllDepartmentsUseCase(repo);
@@ -23,9 +39,33 @@ const getAllDepartmentsController = new GetAllDepartmentsController(getAllDepart
 const updateDepartmentController = new UpdateDepartmentController(updateDepartmentUseCase);
 const deleteDepartmentController = new DeleteDepartmentController(deleteDepartmentUseCase);
 
-router.get("/departments", (req, res) => getAllDepartmentsController.execute(req, res));
-router.post("/departments", (req, res) => createDepartmentController.execute(req, res));
-router.put("/departments/:id", (req, res) => updateDepartmentController.execute(req, res));
-router.delete("/departments/:id", (req, res) => deleteDepartmentController.execute(req, res));
+router.get(
+    "/departments",
+    requireAuthenticatedUser,
+    requirePermission("settings.read"),
+    applyEffectiveScope,
+    (req, res) => getAllDepartmentsController.execute(req, res)
+);
+router.post(
+    "/departments",
+    requireAuthenticatedUser,
+    requirePermission("settings.manage"),
+    applyEffectiveScope,
+    (req, res) => createDepartmentController.execute(req, res)
+);
+router.put(
+    "/departments/:id",
+    requireAuthenticatedUser,
+    requirePermission("settings.manage"),
+    applyEffectiveScope,
+    (req, res) => updateDepartmentController.execute(req, res)
+);
+router.delete(
+    "/departments/:id",
+    requireAuthenticatedUser,
+    requirePermission("settings.manage"),
+    applyEffectiveScope,
+    (req, res) => deleteDepartmentController.execute(req, res)
+);
 
 export default router;

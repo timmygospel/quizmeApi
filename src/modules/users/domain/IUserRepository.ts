@@ -1,4 +1,5 @@
 import { User, UserStatus } from "./User";
+import { EffectiveScope } from "../../../shared/core/EffectiveScope";
 
 export interface UserListFilters {
     search?: string;
@@ -6,6 +7,9 @@ export interface UserListFilters {
     departmentId?: string;
     locationId?: string;
     status?: UserStatus;
+    // PERMISSIONS.md §3 — restricts results to the caller's effective scope.
+    // Undefined/ORGANISATION applies no restriction.
+    scope?: EffectiveScope;
     page: number;
     pageSize: number;
 }
@@ -54,4 +58,7 @@ export interface IUserRepository {
     assignRole(userId: string, roleId: string, scope: RoleScopeInput): Promise<void>;
     removeRole(userId: string, roleId: string): Promise<void>;
     findEffectiveAccess(userId: string): Promise<AssignedRoleScope[]>;
+    findByAuthProviderUserId(provider: string, providerUserId: string): Promise<User | null>;
+    linkAuthProviderIdentity(userId: string, provider: string, providerUserId: string): Promise<void>;
+    touchLastLogin(id: string): Promise<void>;
 }

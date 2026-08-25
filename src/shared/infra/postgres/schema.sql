@@ -243,7 +243,7 @@ CREATE TABLE IF NOT EXISTS roles (
 ALTER TABLE roles ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 
 INSERT INTO roles (code, name, description, type) VALUES
-    ('ADMINISTRATOR', 'Administrator', 'Manages users, access and permissions across the organisation.', 'SYSTEM'),
+    ('ADMINISTRATOR', 'Organisation Admin', 'Manages users, access and permissions across the organisation.', 'SYSTEM'),
     ('MANAGER', 'Manager', 'Monitors assigned teams and manages their training.', 'SYSTEM'),
     ('CONTENT_CREATOR', 'Content Creator', 'Creates and edits training content within an assigned scope.', 'SYSTEM'),
     ('EXECUTIVE', 'Executive', 'Read-only view of organisation-wide performance and reporting.', 'SYSTEM'),
@@ -251,12 +251,20 @@ INSERT INTO roles (code, name, description, type) VALUES
     ('PARTICIPANT', 'Participant', 'Completes assigned training and views their own results.', 'SYSTEM')
 ON CONFLICT (code) DO NOTHING;
 
--- Sprint 4 — Roles: mutation, archive, and the permission catalogue per
--- USERS_ROLES.md §32-33/§40. The catalogue below is the doc's explicit
--- "Initial catalogue" (§40); the finer-grained content permissions used as
--- illustrative UI copy elsewhere in the doc (question.read, etc.) aren't
--- wired to real enforcement anywhere yet, so they're left for when those
--- modules actually need gating.
+-- PERMISSIONS.md (AUTH-002) §1 renamed this role's display name from the
+-- earlier USERS_ROLES.md-era "Administrator" to "Organisation Admin"; the
+-- ON CONFLICT DO NOTHING above only applies on first insert, so re-assert it
+-- for databases that already migrated under the old name. Code (the FK
+-- target everywhere else in the codebase) is intentionally left unchanged.
+UPDATE roles SET name = 'Organisation Admin' WHERE code = 'ADMINISTRATOR';
+
+-- Roles: mutation, archive, and the permission catalogue. Codes/categories
+-- below are the exact "API Permission Codes" catalogue from PERMISSIONS.md
+-- (AUTH-002) §10 — not all of them are wired to real enforcement yet (only
+-- user.* and role.* gate any route so far), the rest are seeded ahead of the
+-- modules that will need them (question/assessment/template/session/etc.)
+-- so the catalogue and role grants can be extended without another schema
+-- change.
 CREATE TABLE IF NOT EXISTS permissions (
     code TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -273,11 +281,46 @@ INSERT INTO permissions (code, name, description, category) VALUES
     ('role.read', 'View roles', 'View roles and their permissions.', 'Roles'),
     ('role.create', 'Create roles', 'Create new custom roles.', 'Roles'),
     ('role.edit', 'Edit roles', 'Edit a role''s details and permissions.', 'Roles'),
-    ('role.archive', 'Archive roles', 'Archive a custom role.', 'Roles'),
     ('role.assign', 'Assign roles', 'Assign roles to users.', 'Roles'),
-    ('permission.read', 'View permissions', 'View the organisation''s permission catalogue.', 'Roles'),
-    ('organisation.membership.manage', 'Manage organisation membership', 'Manage who belongs to the organisation.', 'Organisation')
+    ('role.archive', 'Archive roles', 'Archive a custom role.', 'Roles'),
+    ('question.read', 'View questions', 'View questions.', 'Questions'),
+    ('question.create', 'Create questions', 'Create new questions.', 'Questions'),
+    ('question.edit', 'Edit questions', 'Edit existing questions.', 'Questions'),
+    ('question.review', 'Review questions', 'Review questions submitted for approval.', 'Questions'),
+    ('question.publish', 'Publish questions', 'Publish a question for use.', 'Questions'),
+    ('question.archive', 'Archive questions', 'Archive a question.', 'Questions'),
+    ('assessment.read', 'View assessments', 'View assessments.', 'Assessments'),
+    ('assessment.create', 'Create assessments', 'Create new assessments.', 'Assessments'),
+    ('assessment.edit', 'Edit assessments', 'Edit existing assessments.', 'Assessments'),
+    ('assessment.publish', 'Publish assessments', 'Publish an assessment for use.', 'Assessments'),
+    ('assessment.archive', 'Archive assessments', 'Archive an assessment.', 'Assessments'),
+    ('template.read', 'View training templates', 'View training templates.', 'Templates'),
+    ('template.create', 'Create training templates', 'Create new training templates.', 'Templates'),
+    ('template.edit', 'Edit training templates', 'Edit existing training templates.', 'Templates'),
+    ('template.publish', 'Publish training templates', 'Publish a training template for use.', 'Templates'),
+    ('template.archive', 'Archive training templates', 'Archive a training template.', 'Templates'),
+    ('assignment.read', 'View assignments', 'View training assignments.', 'Assignments'),
+    ('assignment.create', 'Create assignments', 'Assign training to users.', 'Assignments'),
+    ('assignment.manage', 'Manage assignments', 'Manage existing training assignments.', 'Assignments'),
+    ('session.read', 'View sessions', 'View training sessions.', 'Sessions'),
+    ('session.create', 'Create sessions', 'Schedule new training sessions.', 'Sessions'),
+    ('session.manage', 'Manage sessions', 'Manage existing training sessions.', 'Sessions'),
+    ('session.host', 'Host sessions', 'Host a live training session.', 'Sessions'),
+    ('participant.read', 'View participants', 'View participants within scope.', 'Participants'),
+    ('analytics.team.view', 'View team analytics', 'View analytics for a team/scope.', 'Analytics'),
+    ('analytics.content.view', 'View content analytics', 'View analytics for training content.', 'Analytics'),
+    ('analytics.organisation.view', 'View organisation analytics', 'View organisation-wide analytics.', 'Analytics'),
+    ('analytics.export', 'Export analytics reports', 'Export analytics reports.', 'Analytics'),
+    ('settings.read', 'View organisation settings', 'View organisation configuration.', 'Settings'),
+    ('settings.manage', 'Manage organisation settings', 'Manage organisation configuration.', 'Settings'),
+    ('audit.view', 'View audit log', 'View the organisation''s audit log.', 'Audit')
 ON CONFLICT (code) DO NOTHING;
+
+-- permission.read / organisation.membership.manage were a pre-AUTH-002
+-- invention not present in PERMISSIONS.md §10's catalogue — drop them (and,
+-- via the FK cascade, any grants referencing them) so the catalogue matches
+-- the spec exactly. No application code reads these codes.
+DELETE FROM permissions WHERE code IN ('permission.read', 'organisation.membership.manage');
 
 CREATE TABLE IF NOT EXISTS role_permissions (
     role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
@@ -285,23 +328,51 @@ CREATE TABLE IF NOT EXISTS role_permissions (
     PRIMARY KEY (role_id, permission_code)
 );
 
--- Starter grants for the seeded system roles. Approximate — USERS_ROLES.md
--- describes each role's responsibilities in prose (§2 Administrator can
--- manage users/roles/permissions; §67-77 Executive is read-only; §44-55
--- Manager should not manage global roles) but never gives an exact
--- permission-to-role mapping, so this is a reasonable starting grant rather
--- than a value taken directly from the doc.
+-- Starter grants for the seeded system roles, following PERMISSIONS.md §2's
+-- Core Permission Matrix at the coarse (unscoped) permission-code level —
+-- the matrix's scope qualifiers ("within scope", "own") are enforced by
+-- applyEffectiveScope/business-rule checks, not by which codes a role holds.
 INSERT INTO role_permissions (role_id, permission_code)
 SELECT r.id, p.code FROM roles r, permissions p WHERE r.code = 'ADMINISTRATOR'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_id, permission_code)
-SELECT r.id, code FROM roles r, unnest(ARRAY['user.read', 'role.read', 'permission.read']) AS code
+SELECT r.id, perm_code FROM roles r, unnest(ARRAY[
+    'user.read', 'role.read', 'settings.read',
+    'analytics.team.view', 'analytics.content.view', 'analytics.organisation.view', 'analytics.export',
+    'audit.view'
+]) AS perm_code
 WHERE r.code = 'EXECUTIVE'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_id, permission_code)
-SELECT r.id, 'user.read' FROM roles r WHERE r.code = 'MANAGER'
+SELECT r.id, perm_code FROM roles r, unnest(ARRAY[
+    'user.read', 'settings.read',
+    'assignment.read', 'assignment.create', 'assignment.manage',
+    'session.read', 'session.create', 'session.manage',
+    'participant.read',
+    'analytics.team.view'
+]) AS perm_code
+WHERE r.code = 'MANAGER'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_code)
+SELECT r.id, perm_code FROM roles r, unnest(ARRAY[
+    'question.read', 'question.create', 'question.edit', 'question.archive',
+    'assessment.read', 'assessment.create', 'assessment.edit', 'assessment.archive',
+    'template.read', 'template.create', 'template.edit', 'template.archive',
+    'analytics.content.view'
+]) AS perm_code
+WHERE r.code = 'CONTENT_CREATOR'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_code)
+SELECT r.id, perm_code FROM roles r, unnest(ARRAY[
+    'session.read', 'session.host',
+    'participant.read',
+    'analytics.team.view'
+]) AS perm_code
+WHERE r.code = 'TRAINER'
 ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS users (
@@ -360,3 +431,66 @@ CREATE TABLE IF NOT EXISTS user_role_departments (
     PRIMARY KEY (user_id, role_id, department_id),
     FOREIGN KEY (user_id, role_id) REFERENCES user_roles(user_id, role_id) ON DELETE CASCADE
 );
+
+-- ---------------------------------------------------------------------------
+-- Auth provider identity — AUTH-001 Pluggable Authentication Architecture.
+-- Links a users row to the external identity that authenticates as them
+-- (Clerk today; Cognito/Auth0/Entra later). Nullable/unlinked until the
+-- person's first successful sign-in, at which point the auth middleware
+-- links by matching the provider's verified email against users.email
+-- (set at invite time) and never trusts a self-reported id up front.
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider_user_id TEXT;
+
+-- ---------------------------------------------------------------------------
+-- Assessments — formal pass/fail rules layered on top of reusable question
+-- content (ASSESSMENTS.md §1: a Quiz answers "what questions", an Assessment
+-- answers "what determines a pass"). Placed after categories/users, which it
+-- references.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS assessments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+    -- Slice-1 stopgap column — superseded by a derived COUNT() over
+    -- assessment_questions (see PgAssessmentRepository's LIST_SELECT) now
+    -- that table exists. Left in place rather than dropped; no longer written.
+    question_count INTEGER NOT NULL DEFAULT 0,
+    pass_mark INTEGER NOT NULL CHECK (pass_mark BETWEEN 0 AND 100),
+    max_attempts INTEGER CHECK (max_attempts IS NULL OR max_attempts > 0),
+    duration_minutes INTEGER CHECK (duration_minutes IS NULL OR duration_minutes > 0),
+    status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT', 'IN_REVIEW', 'APPROVED', 'PUBLISHED', 'ARCHIVED')),
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Assessment's own copy of reused Question Bank content (ASSESSMENTS.md
+-- §14/§33: content is copied at add-time and frozen, not live-referenced,
+-- so a later edit to the bank question never silently changes a published
+-- assessment or a learner's completed attempt). Mirrors quiz_questions/
+-- quiz_question_options exactly — no FK to question_bank_questions.
+CREATE TABLE IF NOT EXISTS assessment_questions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    assessment_id UUID NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+    question_text TEXT NOT NULL,
+    display_order INTEGER NOT NULL,
+    UNIQUE (assessment_id, display_order)
+);
+
+CREATE TABLE IF NOT EXISTS assessment_question_options (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    question_id UUID NOT NULL REFERENCES assessment_questions(id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    is_correct BOOLEAN NOT NULL DEFAULT false,
+    display_order INTEGER NOT NULL,
+    UNIQUE (question_id, display_order)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS users_auth_provider_identity_idx
+    ON users (auth_provider, auth_provider_user_id)
+    WHERE auth_provider IS NOT NULL AND auth_provider_user_id IS NOT NULL;

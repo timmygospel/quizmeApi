@@ -10,6 +10,8 @@ import {
     TrainingTemplateDTO,
     TrendsResponseDTO,
 } from "../../dtos/AnalyticsDTO";
+import { EffectiveScope } from "../../../../shared/core/EffectiveScope";
+import { buildSessionScopeConditions } from "../../../session/infra/db/PgSessionRepository";
 
 // Below this many responses, a question/section rate is too noisy to alert on.
 const MIN_SAMPLE_SIZE = 5;
@@ -18,29 +20,53 @@ const WEAK_SECTION_THRESHOLD = 60;
 const VERY_DIFFICULT_QUESTION_THRESHOLD = 40;
 
 export class PgAnalyticsRepository implements IAnalyticsRepository {
-    async getTrainingTemplates(): Promise<TrainingTemplateDTO[]> {
+    async getTrainingTemplates(scope?: EffectiveScope): Promise<TrainingTemplateDTO[]> {
+        const params: unknown[] = [];
+        const sessionConditions = buildSessionScopeConditions(scope, params, "s.");
+        // A template is visible if at least one of its sessions falls in the
+        // caller's scope — templates themselves have no location/department
+        // dimension (see quizzes schema), so this is the only way to scope
+        // them at all. Unscoped (ORGANISATION/no scope) callers skip the
+        // EXISTS check entirely and see every template.
+        const whereClause = sessionConditions.length
+            ? `WHERE EXISTS (SELECT 1 FROM sessions s WHERE s.template_id = q.id AND ${sessionConditions.join(" AND ")})`
+            : "";
         const { rows } = await pgPool.query<{ id: string; title: string }>(
-            "SELECT id, title FROM quizzes ORDER BY created_at DESC"
+            `SELECT q.id, q.title FROM quizzes q ${whereClause} ORDER BY q.created_at DESC`,
+            params
         );
         return rows.map((r) => ({ id: r.id, name: r.title }));
     }
 
-    async getSessions(trainingTemplateId?: string): Promise<AnalyticsSessionDTO[]> {
+    async getSessions(trainingTemplateId?: string, scope?: EffectiveScope): Promise<AnalyticsSessionDTO[]> {
+        const params: unknown[] = [];
+        const conditions: string[] = [];
+        if (trainingTemplateId) {
+            params.push(trainingTemplateId);
+            conditions.push(`template_id = $${params.length}`);
+        }
+        conditions.push(...buildSessionScopeConditions(scope, params));
+        const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
         const { rows } = await pgPool.query<{ id: string; name: string; created_at: Date }>(
-            trainingTemplateId
-                ? "SELECT id, name, created_at FROM sessions WHERE template_id = $1 ORDER BY created_at DESC"
-                : "SELECT id, name, created_at FROM sessions ORDER BY created_at DESC",
-            trainingTemplateId ? [trainingTemplateId] : []
+            `SELECT id, name, created_at FROM sessions ${whereClause} ORDER BY created_at DESC`,
+            params
         );
         return rows.map((r) => ({ id: r.id, name: r.name, startedAt: r.created_at.toISOString() }));
     }
 
-    async getSessionSummary(sessionId: string): Promise<SessionSummaryAnalyticsDTO | null> {
+    async getSessionSummary(sessionId: string, scope?: EffectiveScope): Promise<SessionSummaryAnalyticsDTO | null> {
+        const params: unknown[] = [sessionId];
+        // "id = $1" first so buildSessionScopeConditions' placeholders start
+        // numbering from $2.
+        const conditions = ["id = $1", ...buildSessionScopeConditions(scope, params)];
         const { rows: sessionRows } = await pgPool.query<{ pass_threshold: number }>(
-            "SELECT pass_threshold FROM sessions WHERE id = $1",
-            [sessionId]
+            `SELECT pass_threshold FROM sessions WHERE ${conditions.join(" AND ")}`,
+            params
         );
         const session = sessionRows[0];
+        // Same failure for "doesn't exist" and "exists but outside your
+        // scope" — see PERMISSIONS.md §11.
         if (!session) return null;
 
         const { rows } = await pgPool.query<{
@@ -75,10 +101,10 @@ export class PgAnalyticsRepository implements IAnalyticsRepository {
         };
     }
 
-    async getSessionAlerts(sessionId: string): Promise<AlertsResponseDTO> {
+    async getSessionAlerts(sessionId: string, scope?: EffectiveScope): Promise<AlertsResponseDTO> {
         const alerts: DashboardAlertDTO[] = [];
 
-        const summary = await this.getSessionSummary(sessionId);
+        const summary = await this.getSessionSummary(sessionId, scope);
         if (summary && summary.participants_completed > 0 && summary.pass_rate < LOW_PASS_RATE_THRESHOLD) {
             alerts.push({
                 title: "Low pass rate",
@@ -91,7 +117,10 @@ export class PgAnalyticsRepository implements IAnalyticsRepository {
             });
         }
 
-        const weakSections = await this.querySectionScores(sessionId);
+        // querySectionScores/queryQuestionScores are independently scoped
+        // (not just gated by the summary null-check above) so an
+        // out-of-scope session always yields empty data here, never a leak.
+        const weakSections = await this.querySectionScores(sessionId, scope);
         for (const section of weakSections) {
             if (section.responseCount >= MIN_SAMPLE_SIZE && section.averageScore < WEAK_SECTION_THRESHOLD) {
                 alerts.push({
@@ -106,7 +135,7 @@ export class PgAnalyticsRepository implements IAnalyticsRepository {
             }
         }
 
-        const questionScores = await this.queryQuestionScores(sessionId);
+        const questionScores = await this.queryQuestionScores(sessionId, scope);
         for (const question of questionScores) {
             if (question.responseCount >= MIN_SAMPLE_SIZE && question.successRate < VERY_DIFFICULT_QUESTION_THRESHOLD) {
                 alerts.push({
@@ -124,7 +153,11 @@ export class PgAnalyticsRepository implements IAnalyticsRepository {
         return { alerts };
     }
 
-    async getTopProblems(sessionId: string): Promise<TopProblemsResponseDTO> {
+    async getTopProblems(sessionId: string, scope?: EffectiveScope): Promise<TopProblemsResponseDTO> {
+        const atRiskParams: unknown[] = [sessionId];
+        const sessionScopeConditions = buildSessionScopeConditions(scope, atRiskParams, "s.");
+        const atRiskConditions = ["sa.session_id = $1", "sa.completed_at IS NOT NULL", ...sessionScopeConditions];
+        const needsSessionJoin = sessionScopeConditions.length > 0;
         const { rows: atRiskRows } = await pgPool.query<{
             participant_id: string;
             display_name: string | null;
@@ -133,18 +166,19 @@ export class PgAnalyticsRepository implements IAnalyticsRepository {
             `SELECT sp.id AS participant_id, sp.display_name, sa.score_percentage
              FROM session_attempt sa
              JOIN session_participant sp ON sp.id = sa.session_participant_id
-             WHERE sa.session_id = $1 AND sa.completed_at IS NOT NULL
+             ${needsSessionJoin ? "JOIN sessions s ON s.id = sa.session_id" : ""}
+             WHERE ${atRiskConditions.join(" AND ")}
              ORDER BY sa.score_percentage ASC
              LIMIT 10`,
-            [sessionId]
+            atRiskParams
         );
 
-        const weakSections = (await this.querySectionScores(sessionId))
+        const weakSections = (await this.querySectionScores(sessionId, scope))
             .filter((s) => s.responseCount > 0)
             .sort((a, b) => a.averageScore - b.averageScore)
             .slice(0, 10);
 
-        const hardestQuestions = (await this.queryQuestionScores(sessionId))
+        const hardestQuestions = (await this.queryQuestionScores(sessionId, scope))
             .filter((q) => q.responseCount > 0)
             .sort((a, b) => a.successRate - b.successRate)
             .slice(0, 10);
@@ -164,15 +198,21 @@ export class PgAnalyticsRepository implements IAnalyticsRepository {
         };
     }
 
-    async compareByDepartment(sessionId: string): Promise<ComparisonResponseDTO> {
-        return this.compareByGroup(sessionId, "department_id", "departments");
+    async compareByDepartment(sessionId: string, scope?: EffectiveScope): Promise<ComparisonResponseDTO> {
+        return this.compareByGroup(sessionId, "department_id", "departments", scope);
     }
 
-    async compareByLocation(sessionId: string): Promise<ComparisonResponseDTO> {
-        return this.compareByGroup(sessionId, "location_id", "locations");
+    async compareByLocation(sessionId: string, scope?: EffectiveScope): Promise<ComparisonResponseDTO> {
+        return this.compareByGroup(sessionId, "location_id", "locations", scope);
     }
 
-    async getTrends(trainingTemplateId: string): Promise<TrendsResponseDTO> {
+    async getTrends(trainingTemplateId: string, scope?: EffectiveScope): Promise<TrendsResponseDTO> {
+        const params: unknown[] = [trainingTemplateId];
+        const conditions = [
+            "s.template_id = $1",
+            "sa.completed_at IS NOT NULL",
+            ...buildSessionScopeConditions(scope, params, "s."),
+        ];
         const { rows } = await pgPool.query<{
             period: Date;
             average_score: string;
@@ -186,10 +226,10 @@ export class PgAnalyticsRepository implements IAnalyticsRepository {
                 COUNT(*) AS total_count
              FROM session_attempt sa
              JOIN sessions s ON s.id = sa.session_id
-             WHERE s.template_id = $1 AND sa.completed_at IS NOT NULL
+             WHERE ${conditions.join(" AND ")}
              GROUP BY period
              ORDER BY period`,
-            [trainingTemplateId]
+            params
         );
 
         return {
@@ -214,25 +254,34 @@ export class PgAnalyticsRepository implements IAnalyticsRepository {
     private async compareByGroup(
         sessionId: string,
         column: "department_id" | "location_id",
-        table: "departments" | "locations"
+        table: "departments" | "locations",
+        scope?: EffectiveScope
     ): Promise<ComparisonResponseDTO> {
+        const params: unknown[] = [sessionId];
+        const sessionScopeConditions = buildSessionScopeConditions(scope, params, "s.");
+        const conditions = ["sa.session_id = $1", "sa.completed_at IS NOT NULL", ...sessionScopeConditions];
         const { rows } = await pgPool.query<{ id: string; name: string; average_score: string }>(
             `SELECT g.id, g.name, AVG(sa.score_percentage) AS average_score
              FROM session_attempt sa
              JOIN session_participant sp ON sp.id = sa.session_participant_id
              JOIN ${table} g ON g.id = sp.${column}
-             WHERE sa.session_id = $1 AND sa.completed_at IS NOT NULL
+             ${sessionScopeConditions.length ? "JOIN sessions s ON s.id = sa.session_id" : ""}
+             WHERE ${conditions.join(" AND ")}
              GROUP BY g.id, g.name
              ORDER BY average_score ASC`,
-            [sessionId]
+            params
         );
 
         return { items: rows.map((r) => ({ id: r.id, name: r.name, average_score: Number(r.average_score) })) };
     }
 
     private async querySectionScores(
-        sessionId: string
+        sessionId: string,
+        scope?: EffectiveScope
     ): Promise<{ id: string; name: string; averageScore: number; responseCount: number }[]> {
+        const params: unknown[] = [sessionId];
+        const sessionScopeConditions = buildSessionScopeConditions(scope, params, "s.");
+        const conditions = ["sa.session_id = $1", ...sessionScopeConditions];
         const { rows } = await pgPool.query<{
             id: string;
             name: string;
@@ -248,9 +297,10 @@ export class PgAnalyticsRepository implements IAnalyticsRepository {
              JOIN session_attempt sa ON sa.id = sr.session_attempt_id
              JOIN quiz_section_questions qsq ON qsq.question_id = sr.quiz_question_id
              JOIN quiz_sections qs ON qs.id = qsq.section_id
-             WHERE sa.session_id = $1
+             ${sessionScopeConditions.length ? "JOIN sessions s ON s.id = sa.session_id" : ""}
+             WHERE ${conditions.join(" AND ")}
              GROUP BY qs.id, qs.name`,
-            [sessionId]
+            params
         );
 
         return rows.map((r) => {
@@ -261,8 +311,12 @@ export class PgAnalyticsRepository implements IAnalyticsRepository {
     }
 
     private async queryQuestionScores(
-        sessionId: string
+        sessionId: string,
+        scope?: EffectiveScope
     ): Promise<{ id: string; text: string; successRate: number; responseCount: number }[]> {
+        const params: unknown[] = [sessionId];
+        const sessionScopeConditions = buildSessionScopeConditions(scope, params, "s.");
+        const conditions = ["sa.session_id = $1", ...sessionScopeConditions];
         const { rows } = await pgPool.query<{
             id: string;
             question_text: string;
@@ -277,9 +331,10 @@ export class PgAnalyticsRepository implements IAnalyticsRepository {
              FROM session_response sr
              JOIN session_attempt sa ON sa.id = sr.session_attempt_id
              JOIN quiz_questions qq ON qq.id = sr.quiz_question_id
-             WHERE sa.session_id = $1
+             ${sessionScopeConditions.length ? "JOIN sessions s ON s.id = sa.session_id" : ""}
+             WHERE ${conditions.join(" AND ")}
              GROUP BY qq.id, qq.question_text`,
-            [sessionId]
+            params
         );
 
         return rows.map((r) => {

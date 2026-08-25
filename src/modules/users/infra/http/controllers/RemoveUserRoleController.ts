@@ -10,7 +10,7 @@ export class RemoveUserRoleController extends BaseController {
         const userId = String(this.req.params.id);
         const roleId = String(this.req.params.roleId);
 
-        const result = await this.useCase.execute(userId, roleId);
+        const result = await this.useCase.execute(userId, roleId, this.req.effectiveScope);
 
         if (result.isFailure) {
             const error = result.errorValue();

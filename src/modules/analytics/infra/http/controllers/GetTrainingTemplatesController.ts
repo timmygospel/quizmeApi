@@ -7,6 +7,6 @@ export class GetTrainingTemplatesController extends BaseController {
     }
 
     protected async executeImpl(): Promise<void> {
-        this.ok(await this.useCase.execute());
+        this.ok(await this.useCase.execute(this.req.effectiveScope));
     }
 }

@@ -3,8 +3,9 @@ import { AssignedRoleScope, IUserRepository } from "../../../domain/IUserReposit
 import { User } from "../../../domain/User";
 import { IRoleRepository } from "../../../../roles/domain/IRoleRepository";
 import { Role } from "../../../../roles/domain/Role";
+import { EffectiveScope } from "../../../../../shared/core/EffectiveScope";
 
-function makeUser(): User {
+function makeUser(locationId: string | null = null): User {
     return new User(
         {
             firstName: "Sarah",
@@ -12,7 +13,7 @@ function makeUser(): User {
             email: { value: "sarah@example.com" } as any,
             status: "ACTIVE",
             department: null,
-            location: null,
+            location: locationId ? { id: locationId, name: "Birmingham" } : null,
             roles: [],
             lastLoginAt: null,
             invitationSentAt: null,
@@ -41,6 +42,9 @@ function makeUserRepo(overrides: Partial<IUserRepository> = {}): IUserRepository
         assignRole: jest.fn(),
         removeRole: jest.fn(),
         findEffectiveAccess: jest.fn().mockResolvedValue([] as AssignedRoleScope[]),
+        findByAuthProviderUserId: jest.fn(),
+        linkAuthProviderIdentity: jest.fn(),
+        touchLastLogin: jest.fn(),
         ...overrides,
     };
 }
@@ -78,6 +82,18 @@ describe("RemoveUserRoleUseCase", () => {
 
         expect(result.isFailure).toBe(true);
         expect(result.errorValue()).toBe("USER_NOT_FOUND");
+    });
+
+    it("fails with USER_NOT_FOUND when the user exists but is outside the caller's scope", async () => {
+        const userRepo = makeUserRepo({ findById: jest.fn().mockResolvedValue(makeUser("loc-2")) });
+        const useCase = new RemoveUserRoleUseCase(userRepo, makeRoleRepo());
+        const scope: EffectiveScope = { type: "SCOPED", userId: "caller", allLocations: false, locationIds: ["loc-1"], departmentIds: [] };
+
+        const result = await useCase.execute("user-1", "role-1", scope);
+
+        expect(result.isFailure).toBe(true);
+        expect(result.errorValue()).toBe("USER_NOT_FOUND");
+        expect(userRepo.removeRole).not.toHaveBeenCalled();
     });
 
     it("fails when the role isn't assigned to the user", async () => {

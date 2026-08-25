@@ -17,6 +17,9 @@ function makeRepo(result: UserListResult, capture: { filters?: UserListFilters }
         assignRole: jest.fn(),
         removeRole: jest.fn(),
         findEffectiveAccess: jest.fn(),
+        findByAuthProviderUserId: jest.fn(),
+        linkAuthProviderIdentity: jest.fn(),
+        touchLastLogin: jest.fn(),
     };
 }
 
@@ -72,6 +75,16 @@ describe("GetAllUsersUseCase", () => {
         });
     });
 
+    it("passes the caller's effective scope through to the repository", async () => {
+        const capture: { filters?: UserListFilters } = {};
+        const useCase = new GetAllUsersUseCase(makeRepo({ items: [], totalItems: 0 }, capture));
+        const scope = { type: "SCOPED" as const, userId: "user-1", allLocations: false, locationIds: ["loc-1"], departmentIds: [] };
+
+        await useCase.execute({ scope });
+
+        expect(capture.filters?.scope).toEqual(scope);
+    });
+
     it("returns a failure Result when the repository throws", async () => {
         const repo: IUserRepository = {
             findById: jest.fn(),
@@ -85,6 +98,9 @@ describe("GetAllUsersUseCase", () => {
             assignRole: jest.fn(),
             removeRole: jest.fn(),
             findEffectiveAccess: jest.fn(),
+            findByAuthProviderUserId: jest.fn(),
+            linkAuthProviderIdentity: jest.fn(),
+            touchLastLogin: jest.fn(),
         };
         const useCase = new GetAllUsersUseCase(repo);
 

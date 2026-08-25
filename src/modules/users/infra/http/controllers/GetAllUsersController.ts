@@ -29,6 +29,7 @@ export class GetAllUsersController extends BaseController {
             departmentId: asString(departmentId),
             locationId: asString(locationId),
             status: statusFilter,
+            scope: this.req.effectiveScope,
             page: asString(page) ? Number(page) : undefined,
             pageSize: asString(pageSize) ? Number(pageSize) : undefined,
         });

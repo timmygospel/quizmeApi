@@ -19,9 +19,29 @@ import { GetTopProblemsController } from "./controllers/GetTopProblemsController
 import { CompareByDepartmentController } from "./controllers/CompareByDepartmentController";
 import { CompareByLocationController } from "./controllers/CompareByLocationController";
 import { GetTrendsController } from "./controllers/GetTrendsController";
+import { PgUserRepository } from "../../../users/infra/db/PgUserRepository";
+import { PgRoleRepository } from "../../../roles/infra/db/PgRoleRepository";
+import {
+    requireAuthenticatedUser,
+    createRequirePermission,
+    createApplyEffectiveScope,
+} from "../../../../shared/infra/http/authorizationMiddleware";
 
 const router = express.Router();
 const repo = new PgAnalyticsRepository();
+const userRepo = new PgUserRepository();
+const roleRepo = new PgRoleRepository();
+
+// PERMISSIONS.md §11 pipeline. Mapping across the §10 analytics.* codes,
+// following §2's Core Permission Matrix: browse/list endpoints and
+// people/performance data (summary, alerts, department/location comparison)
+// use analytics.team.view — matching Manager's matrix grant of "View team
+// analytics ✅ within scope" / "Compare departments|locations ✅ (scoped)".
+// Content-quality data (top-problems, template trends) uses
+// analytics.content.view instead, matching Content Creator's "View content
+// analytics ✅ aggregated" while Manager's matrix row for that is ❌.
+const requirePermission = createRequirePermission(userRepo, roleRepo);
+const applyEffectiveScope = createApplyEffectiveScope(userRepo, roleRepo);
 
 const getTrainingTemplatesController = new GetTrainingTemplatesController(new GetTrainingTemplatesUseCase(repo));
 const getSessionsController = new GetSessionsController(new GetSessionsUseCase(repo));
@@ -32,13 +52,61 @@ const compareByDepartmentController = new CompareByDepartmentController(new Comp
 const compareByLocationController = new CompareByLocationController(new CompareByLocationUseCase(repo));
 const getTrendsController = new GetTrendsController(new GetTrendsUseCase(repo));
 
-router.get("/analytics/training-templates", (req, res) => getTrainingTemplatesController.execute(req, res));
-router.get("/analytics/sessions", (req, res) => getSessionsController.execute(req, res));
-router.get("/analytics/sessions/:id/summary", (req, res) => getSessionSummaryController.execute(req, res));
-router.get("/analytics/sessions/:id/alerts", (req, res) => getSessionAlertsController.execute(req, res));
-router.get("/analytics/sessions/:id/top-problems", (req, res) => getTopProblemsController.execute(req, res));
-router.get("/analytics/sessions/:id/compare/departments", (req, res) => compareByDepartmentController.execute(req, res));
-router.get("/analytics/sessions/:id/compare/locations", (req, res) => compareByLocationController.execute(req, res));
-router.get("/analytics/training-templates/:id/trends", (req, res) => getTrendsController.execute(req, res));
+router.get(
+    "/analytics/training-templates",
+    requireAuthenticatedUser,
+    requirePermission("analytics.team.view"),
+    applyEffectiveScope,
+    (req, res) => getTrainingTemplatesController.execute(req, res)
+);
+router.get(
+    "/analytics/sessions",
+    requireAuthenticatedUser,
+    requirePermission("analytics.team.view"),
+    applyEffectiveScope,
+    (req, res) => getSessionsController.execute(req, res)
+);
+router.get(
+    "/analytics/sessions/:id/summary",
+    requireAuthenticatedUser,
+    requirePermission("analytics.team.view"),
+    applyEffectiveScope,
+    (req, res) => getSessionSummaryController.execute(req, res)
+);
+router.get(
+    "/analytics/sessions/:id/alerts",
+    requireAuthenticatedUser,
+    requirePermission("analytics.team.view"),
+    applyEffectiveScope,
+    (req, res) => getSessionAlertsController.execute(req, res)
+);
+router.get(
+    "/analytics/sessions/:id/top-problems",
+    requireAuthenticatedUser,
+    requirePermission("analytics.content.view"),
+    applyEffectiveScope,
+    (req, res) => getTopProblemsController.execute(req, res)
+);
+router.get(
+    "/analytics/sessions/:id/compare/departments",
+    requireAuthenticatedUser,
+    requirePermission("analytics.team.view"),
+    applyEffectiveScope,
+    (req, res) => compareByDepartmentController.execute(req, res)
+);
+router.get(
+    "/analytics/sessions/:id/compare/locations",
+    requireAuthenticatedUser,
+    requirePermission("analytics.team.view"),
+    applyEffectiveScope,
+    (req, res) => compareByLocationController.execute(req, res)
+);
+router.get(
+    "/analytics/training-templates/:id/trends",
+    requireAuthenticatedUser,
+    requirePermission("analytics.content.view"),
+    applyEffectiveScope,
+    (req, res) => getTrendsController.execute(req, res)
+);
 
 export default router;

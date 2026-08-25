@@ -11,7 +11,7 @@ export class GetAllSessionsController extends BaseController {
 
     protected async executeImpl(): Promise<any> {
         try {
-            const result: Result<Session[]> = await this.useCase.execute();
+            const result: Result<Session[]> = await this.useCase.execute(this.req.effectiveScope);
 
             if (result.isFailure) {
                 return this.fail(result.errorValue());

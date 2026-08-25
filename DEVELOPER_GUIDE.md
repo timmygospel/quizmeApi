@@ -116,12 +116,50 @@ Use Insomnia or Postman:
 
 ## 🧩 Environment Setup
 
-`.env`
+`.env` (see `.env.example`)
 ```
 PORT=4000
-MONGO_URI=mongodb+srv://<user>:<password>@<cluster>/<db>?retryWrites=true&w=majority
+DATABASE_URL=postgres://quizmeapi:quizmeapi@localhost:5432/quizmeapi
 NODE_ENV=development
 ```
+
+Run `npm run db:migrate` after setting `DATABASE_URL` to create/update the Postgres schema.
+
+---
+
+## 🔐 First-Time Setup — Bootstrapping the First Admin
+
+AUTH-002 wired permission checks (`requireAuthenticatedUser` → `requirePermission` →
+`applyEffectiveScope`, see `src/shared/infra/http/authorizationMiddleware.ts`) onto
+every `/api/v1/users` and `/api/v1/roles` route. That means a fresh database has
+no way to create its first user through the API — every user-management endpoint
+now requires an already-authenticated caller who already holds the matching
+permission.
+
+`npm run bootstrap:admin` breaks that chicken-and-egg loop. It's a standalone
+script (`src/shared/infra/postgres/bootstrapAdmin.ts`) that talks to the
+repositories directly, never over HTTP — the equivalent of an operator running a
+one-off DB seed, not an API request, so it doesn't weaken enforcement on the API
+itself.
+
+Run once per environment, after `npm run db:migrate`:
+
+```bash
+npm run bootstrap:admin -- --email=you@company.com --firstName=Ada --lastName=Lovelace
+```
+
+(or set `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_FIRST_NAME` / `BOOTSTRAP_ADMIN_LAST_NAME`
+env vars instead of flags — handy for a deploy hook, e.g. `fly ssh console` in
+production.)
+
+This creates a `users` row with status `INVITED` and the **Organisation Admin**
+role — org-wide, so unlike every other role it needs no location/department
+scope. Nothing gets emailed; sign up through Clerk with the exact same email
+address afterwards, and your first authenticated request auto-links the Clerk
+identity to this user and flips them to `ACTIVE` (see `authMiddleware.ts`).
+
+The script refuses to run if that email already exists, or if the
+`ADMINISTRATOR` role isn't seeded yet (run `npm run db:migrate` first).
 
 ---
 

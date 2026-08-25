@@ -10,13 +10,16 @@ export class AssignUserRoleController extends BaseController {
         const userId = String(this.req.params.id);
         const body = this.req.body ?? {};
 
-        const result = await this.useCase.execute({
-            userId,
-            roleId: body.roleId,
-            allLocations: body.allLocations,
-            locationIds: body.locationIds,
-            departmentIds: body.departmentIds,
-        });
+        const result = await this.useCase.execute(
+            {
+                userId,
+                roleId: body.roleId,
+                allLocations: body.allLocations,
+                locationIds: body.locationIds,
+                departmentIds: body.departmentIds,
+            },
+            this.req.effectiveScope
+        );
 
         if (result.isFailure) {
             const error = result.errorValue();

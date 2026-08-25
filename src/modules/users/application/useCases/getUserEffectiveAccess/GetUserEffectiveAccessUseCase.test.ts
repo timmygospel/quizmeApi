@@ -38,6 +38,9 @@ function makeUserRepo(overrides: Partial<IUserRepository> = {}): IUserRepository
         assignRole: jest.fn(),
         removeRole: jest.fn(),
         findEffectiveAccess: jest.fn().mockResolvedValue([] as AssignedRoleScope[]),
+        findByAuthProviderUserId: jest.fn(),
+        linkAuthProviderIdentity: jest.fn(),
+        touchLastLogin: jest.fn(),
         ...overrides,
     };
 }

@@ -3,6 +3,8 @@ import { IUserRepository } from "../../../domain/IUserRepository";
 import { IRoleRepository } from "../../../../roles/domain/IRoleRepository";
 import { EffectiveAccessDTO } from "../../../dtos/EffectiveAccessDTO";
 import { buildEffectiveAccess } from "../shared/buildEffectiveAccess";
+import { isUserWithinScope } from "../../../domain/userInScope";
+import { EffectiveScope } from "../../../../../shared/core/EffectiveScope";
 
 export class RemoveUserRoleUseCase {
     constructor(
@@ -10,10 +12,10 @@ export class RemoveUserRoleUseCase {
         private roleRepo: IRoleRepository
     ) { }
 
-    async execute(userId: string, roleId: string): Promise<Result<EffectiveAccessDTO>> {
+    async execute(userId: string, roleId: string, scope?: EffectiveScope): Promise<Result<EffectiveAccessDTO>> {
         try {
             const user = await this.userRepo.findById(userId);
-            if (!user) return Result.fail("USER_NOT_FOUND");
+            if (!user || !isUserWithinScope(user, scope)) return Result.fail("USER_NOT_FOUND");
 
             const hasRole = await this.userRepo.hasRole(userId, roleId);
             if (!hasRole) return Result.fail("ROLE_NOT_ASSIGNED");
