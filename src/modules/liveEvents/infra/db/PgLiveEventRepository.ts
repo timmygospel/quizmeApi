@@ -54,6 +54,18 @@ export class PgLiveEventRepository {
         return Number(rows[0]?.count ?? 0);
     }
 
+    // Host-facing roster — lets the admin screen show who's actually joined
+    // (name + when), not just a count.
+    async listParticipants(
+        liveEventId: string
+    ): Promise<{ participantId: string; name: string | null; joinedAt: Date }[]> {
+        const { rows } = await pgPool.query<{ participant_id: string; name: string | null; joined_at: Date }>(
+            "SELECT participant_id, name, joined_at FROM live_participants WHERE live_event_id = $1 ORDER BY joined_at DESC",
+            [liveEventId]
+        );
+        return rows.map((r) => ({ participantId: r.participant_id, name: r.name, joinedAt: r.joined_at }));
+    }
+
     async setActiveQuestion(liveEventId: string, questionIndex: number, visible: boolean): Promise<void> {
         await pgPool.query(
             `UPDATE live_events

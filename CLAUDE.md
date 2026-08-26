@@ -108,4 +108,4 @@ Read-only reporting module backing the frontend's `AnalyticsAPI` (`src/modules/a
 
 Deployed to **Fly.io**. GitHub Actions (`.github/workflows/fly-deploy.yml`) deploys automatically on push to `main`. Uses `FLY_API_TOKEN` secret.
 
-CORS allows `http://localhost:5173` and `https://mfquiz-web.fly.dev`. Note: Socket.IO CORS currently only lists `http://localhost:5173` (production origin not included).
+CORS (both Express and Socket.IO) allows `http://localhost:5173` and `https://mfquiz-web.fly.dev` by default, plus any origins in `CORS_EXTRA_ORIGINS` (comma-separated env var — see `src/shared/config/corsOrigins.ts`). Use `CORS_EXTRA_ORIGINS` to add a Cloudflare Tunnel hostname for mobile/device dev testing without code changes; leave it unset to stay on plain localhost. Outside `NODE_ENV=production`, any `localhost`/`127.0.0.1`/private-LAN origin (`10.x`, `172.16-31.x`, `192.168.x`) is also allowed on any port, and so is any `*.trycloudflare.com` quick-tunnel hostname — so testing Live Quiz from a phone (via LAN IP, a shifted Vite dev port, or a `cloudflared` quick tunnel) works without editing `.env` each time.

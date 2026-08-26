@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import { isOriginAllowed } from "./shared/config/corsOrigins";
 import { redis } from "./shared/infra/redis/redisClient";
 import { createAuthProvider } from "./shared/infra/auth/authProviderFactory";
 import { createAuthMiddleware } from "./shared/infra/http/authMiddleware";
@@ -24,16 +25,11 @@ const app = express();
 
 app.use(express.json());
 
-const allowedOrigins = [
-    "http://localhost:5173",
-    "https://mfquiz-web.fly.dev",
-];
-
 app.use(
     cors({
         origin: (origin, cb) => {
             if (!origin) return cb(null, true);
-            if (allowedOrigins.includes(origin)) return cb(null, true);
+            if (isOriginAllowed(origin)) return cb(null, true);
             return cb(new Error(`CORS blocked for origin: ${origin}`));
         },
         credentials: false, // switch to true only if cookie auth is added
@@ -55,7 +51,7 @@ if (authProvider) {
     console.warn("⚠️ No auth provider configured (CLERK_SECRET_KEY missing) — req.authUser will never be populated");
 }
 
-app.get("/health", async (_req, res) => {
+const healthCheck = async (_req: express.Request, res: express.Response) => {
     if (!redis) {
         res.status(200).json({ status: "ok" });
         return;
@@ -66,7 +62,12 @@ app.get("/health", async (_req, res) => {
     } catch {
         res.status(503).json({ status: "degraded", redis: "error" });
     }
-});
+};
+
+app.get("/health", healthCheck);
+// Also exposed under /api/v1 so it survives a Vite dev proxy / Cloudflare
+// Tunnel setup that only forwards /api/* (see corsOrigins.ts comment).
+app.get("/api/v1/health", healthCheck);
 app.use("/api/v1", quizRoutes);
 app.use("/api/v1", categoryRoutes);
 app.use("/api/v1", questionBankRoutes);

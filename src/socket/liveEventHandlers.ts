@@ -23,9 +23,18 @@ type QuizSnapshot = {
     questions: QuizQuestion[];
 };
 
+// Ephemeral, per-event real-time state. `activeQuestionIndex` and
+// `questionVisible` are also persisted to Postgres (see liveEventRepo) as
+// the durable fallback; `locked`/`revealed`/`paused` have no DB column —
+// they're intentionally volatile. A mid-session server restart resetting
+// them to "not locked / not revealed / not paused" is an acceptable
+// degradation for a live session.
 type ActiveState = {
     activeQuestionIndex: number;
     questionVisible: boolean;
+    locked: boolean;
+    revealed: boolean;
+    paused: boolean;
 };
 
 type AdminJoinPayload = {
@@ -46,10 +55,9 @@ type SetActivePayload = {
     questionIndex: number;
 };
 
-type ShowPayload = {
+type AdminActionPayload = {
     eventCode: string;
     adminToken: string;
-    visible: boolean;
 };
 
 type AnswerPayload = {
@@ -66,6 +74,14 @@ type AnswerPayload = {
 const TTL = 86400; // 24 hours in seconds
 
 const liveEventRepo = new PgLiveEventRepository();
+
+const DEFAULT_ACTIVE_STATE: ActiveState = {
+    activeQuestionIndex: 0,
+    questionVisible: false,
+    locked: false,
+    revealed: false,
+    paused: false,
+};
 
 /* -----------------------------
    Structured Logger
@@ -103,6 +119,10 @@ const keys = {
 ------------------------------*/
 
 const room = (eventCode: string) => `live:${eventCode}`;
+// Admin-only channel — the participant roster (names) goes here, never to
+// the general room, so participants' own sockets never receive everyone
+// else's name.
+const adminRoom = (eventCode: string) => `live:${eventCode}:admin`;
 
 function safeCode(code: string) {
     return String(code ?? "").trim().toUpperCase();
@@ -134,10 +154,11 @@ function normalizeQuestions(raw: any[]): QuizQuestion[] {
 }
 
 /* -----------------------------
-   In-memory fallback
+   In-memory fallback (single-instance dev / no Redis configured)
 ------------------------------*/
 
 const quizCache = new Map<string, QuizSnapshot>();
+const activeStateCache = new Map<string, ActiveState>();
 
 /* -----------------------------
    State Accessor Helpers
@@ -168,16 +189,24 @@ async function getActiveState(
     if (redis) {
         const raw = await redis.get(keys.active(code));
         if (!raw) return fallback;
-        return JSON.parse(raw) as ActiveState;
+        return { ...fallback, ...JSON.parse(raw) } as ActiveState;
     }
-    return fallback;
+    return activeStateCache.get(code) ?? fallback;
 }
 
-async function setActiveState(code: string, state: ActiveState): Promise<void> {
+// Partial update — merges onto whatever's already stored (falling back to
+// DEFAULT_ACTIVE_STATE) so callers only need to specify the fields they're
+// actually changing.
+async function patchActiveState(code: string, patch: Partial<ActiveState>): Promise<ActiveState> {
+    const current = await getActiveState(code, DEFAULT_ACTIVE_STATE);
+    const next: ActiveState = { ...current, ...patch };
     if (redis) {
-        await redis.set(keys.active(code), JSON.stringify(state));
+        await redis.set(keys.active(code), JSON.stringify(next));
         await redis.expire(keys.active(code), TTL);
+    } else {
+        activeStateCache.set(code, next);
     }
+    return next;
 }
 
 async function computeResults(
@@ -222,6 +251,36 @@ async function computeResults(
     };
 }
 
+// Participants never receive `correct` flags (or a usable correctIndex)
+// until the host has revealed the answer.
+function publicQuestion(q: QuizQuestion, revealed: boolean) {
+    return {
+        question: q.question,
+        options: q.options.map((o) =>
+            revealed ? { text: o.text, correct: o.correct } : { text: o.text }
+        ),
+        ...(revealed ? { correctIndex: q.correctIndex } : {}),
+    };
+}
+
+function emitQuestionState(
+    io: Server,
+    target: string,
+    eventCode: string,
+    state: ActiveState,
+    quiz: QuizSnapshot | null
+) {
+    const q = quiz?.questions?.[state.activeQuestionIndex];
+    io.to(target).emit("event:question", {
+        eventCode,
+        activeQuestionIndex: state.activeQuestionIndex,
+        questionVisible: state.questionVisible,
+        locked: state.locked,
+        revealed: state.revealed,
+        question: q ? publicQuestion(q, state.revealed) : null,
+    });
+}
+
 /* -----------------------------
    Socket Registration
 ------------------------------*/
@@ -252,11 +311,23 @@ export function registerLiveEventHandlers(io: Server) {
 
                 await liveEventRepo.addParticipant(ev.id, participantId, name);
                 const participantsCount = await liveEventRepo.countParticipants(ev.id);
+                const participants = await liveEventRepo.listParticipants(ev.id);
 
                 log("info", "participant joined", { eventCode, participantId });
 
+                // Admin-only — never sent to the general room.
+                io.to(adminRoom(eventCode)).emit("event:participants", {
+                    eventCode,
+                    participants: participants.map((p) => ({
+                        participantId: p.participantId,
+                        name: p.name,
+                        joinedAt: p.joinedAt.toISOString(),
+                    })),
+                });
+
                 const quiz = await getQuizSnapshot(eventCode);
                 const activeState = await getActiveState(eventCode, {
+                    ...DEFAULT_ACTIVE_STATE,
                     activeQuestionIndex: ev.active_question_index,
                     questionVisible: ev.question_visible,
                 });
@@ -269,6 +340,9 @@ export function registerLiveEventHandlers(io: Server) {
                     quizTitle: quiz?.quizTitle,
                     activeQuestionIndex: activeState.activeQuestionIndex,
                     questionVisible: activeState.questionVisible,
+                    locked: activeState.locked,
+                    revealed: activeState.revealed,
+                    paused: activeState.paused,
                     participantId,
                 });
 
@@ -279,20 +353,9 @@ export function registerLiveEventHandlers(io: Server) {
                 });
 
                 // If question is active, send immediately
-                const activeQ =
-                    quiz?.questions?.[activeState.activeQuestionIndex];
+                const activeQ = quiz?.questions?.[activeState.activeQuestionIndex];
                 if (activeState.questionVisible && activeQ) {
-                    io.to(socket.id).emit("event:question", {
-                        eventCode,
-                        activeQuestionIndex: activeState.activeQuestionIndex,
-                        questionVisible: true,
-                        question: {
-                            question: activeQ.question,
-                            options: activeQ.options.map((o) => ({
-                                text: o.text,
-                            })),
-                        },
-                    });
+                    emitQuestionState(io, socket.id, eventCode, activeState, quiz);
 
                     const results = await computeResults(
                         eventCode,
@@ -337,9 +400,12 @@ export function registerLiveEventHandlers(io: Server) {
                 };
 
                 await setQuizSnapshot(eventCode, snapshot);
-                await setActiveState(eventCode, {
+                await patchActiveState(eventCode, {
                     activeQuestionIndex: ev.active_question_index,
                     questionVisible: ev.question_visible,
+                    locked: false,
+                    revealed: false,
+                    paused: false,
                 });
 
                 // Durable, immutable snapshot for post-event analytics.
@@ -352,15 +418,27 @@ export function registerLiveEventHandlers(io: Server) {
                 socket.data.isAdmin = true;
                 socket.data.eventCode = eventCode;
                 socket.join(room(eventCode));
+                socket.join(adminRoom(eventCode));
 
                 log("info", "admin joined", { eventCode });
 
-                cb?.({ ok: true });
+                const participants = await liveEventRepo.listParticipants(ev.id);
+                cb?.({
+                    ok: true,
+                    participants: participants.map((p) => ({
+                        participantId: p.participantId,
+                        name: p.name,
+                        joinedAt: p.joinedAt.toISOString(),
+                    })),
+                });
             }
         );
 
         /* -----------------------------
-           Set Active Question
+           Open a question (advance to it and show it).
+           Used for the very first question and every "Next Question" /
+           sidebar jump after that — there's no separate "select, then
+           press Start" step once the session is under way.
         ------------------------------*/
         socket.on(
             "event:setActiveQuestion",
@@ -387,69 +465,93 @@ export function registerLiveEventHandlers(io: Server) {
 
                 await liveEventRepo.setActiveQuestion(ev.id, payload.questionIndex, true);
 
-                await setActiveState(eventCode, {
+                const state = await patchActiveState(eventCode, {
                     activeQuestionIndex: payload.questionIndex,
                     questionVisible: true,
+                    locked: false,
+                    revealed: false,
                 });
 
-                log("info", "active question set", {
+                log("info", "question opened", {
                     eventCode,
                     questionIndex: payload.questionIndex,
                 });
 
-                const q = quiz.questions[payload.questionIndex];
-
-                io.to(room(eventCode)).emit("event:question", {
-                    eventCode,
-                    activeQuestionIndex: payload.questionIndex,
-                    questionVisible: true,
-                    question: {
-                        question: q.question,
-                        options: q.options.map((o) => ({
-                            text: o.text,
-                        })),
-                    },
-                });
-
-                const results = await computeResults(
-                    eventCode,
-                    ev.id,
-                    payload.questionIndex,
-                    q.options.length,
-                    q.correctIndex
-                );
-
-                io.to(room(eventCode)).emit("event:results", {
-                    eventCode,
-                    activeQuestionIndex: payload.questionIndex,
-                    ...results,
-                });
+                emitQuestionState(io, room(eventCode), eventCode, state, quiz);
             }
         );
 
         /* -----------------------------
-           Show / Hide Question
+           Close voting — freezes answers but keeps the question on
+           screen (participants keep seeing it, just can't answer).
         ------------------------------*/
         socket.on(
-            "event:showQuestion",
-            async (payload: ShowPayload) => {
+            "event:closeVoting",
+            async (payload: AdminActionPayload) => {
                 const eventCode = safeCode(payload.eventCode);
 
                 const ev = await liveEventRepo.findByEventCode(eventCode);
                 if (!ev || ev.admin_token !== payload.adminToken) return;
 
-                const visible = !!payload.visible;
-                await liveEventRepo.setQuestionVisible(ev.id, visible);
+                const quiz = await getQuizSnapshot(eventCode);
+                const state = await patchActiveState(eventCode, { locked: true });
 
-                await setActiveState(eventCode, {
-                    activeQuestionIndex: ev.active_question_index,
-                    questionVisible: visible,
-                });
+                log("info", "voting closed", { eventCode });
 
-                log("info", "question visibility changed", {
-                    eventCode,
-                    visible,
-                });
+                emitQuestionState(io, room(eventCode), eventCode, state, quiz);
+            }
+        );
+
+        /* -----------------------------
+           Reveal the correct answer — participants get told which
+           option (if any) was correct.
+        ------------------------------*/
+        socket.on(
+            "event:revealAnswer",
+            async (payload: AdminActionPayload) => {
+                const eventCode = safeCode(payload.eventCode);
+
+                const ev = await liveEventRepo.findByEventCode(eventCode);
+                if (!ev || ev.admin_token !== payload.adminToken) return;
+
+                const quiz = await getQuizSnapshot(eventCode);
+                const state = await patchActiveState(eventCode, { locked: true, revealed: true });
+
+                log("info", "answer revealed", { eventCode });
+
+                emitQuestionState(io, room(eventCode), eventCode, state, quiz);
+            }
+        );
+
+        /* -----------------------------
+           Pause / Resume — blocks answers session-wide without
+           touching which question is on screen.
+        ------------------------------*/
+        socket.on(
+            "event:pause",
+            async (payload: AdminActionPayload) => {
+                const eventCode = safeCode(payload.eventCode);
+
+                const ev = await liveEventRepo.findByEventCode(eventCode);
+                if (!ev || ev.admin_token !== payload.adminToken) return;
+
+                await patchActiveState(eventCode, { paused: true });
+                log("info", "session paused", { eventCode });
+                io.to(room(eventCode)).emit("event:paused", { eventCode, paused: true });
+            }
+        );
+
+        socket.on(
+            "event:resume",
+            async (payload: AdminActionPayload) => {
+                const eventCode = safeCode(payload.eventCode);
+
+                const ev = await liveEventRepo.findByEventCode(eventCode);
+                if (!ev || ev.admin_token !== payload.adminToken) return;
+
+                await patchActiveState(eventCode, { paused: false });
+                log("info", "session resumed", { eventCode });
+                io.to(room(eventCode)).emit("event:paused", { eventCode, paused: false });
             }
         );
 
@@ -473,6 +575,16 @@ export function registerLiveEventHandlers(io: Server) {
                 const ev = await liveEventRepo.findByEventCode(eventCode);
                 if (!ev || ev.status !== "live") {
                     cb?.({ ok: false });
+                    return;
+                }
+
+                const state = await getActiveState(eventCode, DEFAULT_ACTIVE_STATE);
+                if (state.paused) {
+                    cb?.({ ok: false, message: "Session is paused" });
+                    return;
+                }
+                if (state.locked) {
+                    cb?.({ ok: false, message: "Voting is closed for this question" });
                     return;
                 }
 

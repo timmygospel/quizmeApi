@@ -1,6 +1,7 @@
 import { Server as HttpServer } from "http";
 import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
+import { isOriginAllowed } from "../shared/config/corsOrigins";
 import { redisPub, redisSub } from "../shared/infra/redis/redisClient";
 import { registerLiveEventHandlers } from "./liveEventHandlers";
 
@@ -9,7 +10,10 @@ let io: Server | null = null;
 export function initSocketServer(server: HttpServer) {
     io = new Server(server, {
         cors: {
-            origin: ["http://localhost:5173", "https://mfquiz-web.fly.dev"],
+            origin: (origin, cb) => {
+                if (!origin || isOriginAllowed(origin)) return cb(null, true);
+                return cb(new Error(`CORS blocked for origin: ${origin}`));
+            },
             methods: ["GET", "POST"],
         },
         transports:
