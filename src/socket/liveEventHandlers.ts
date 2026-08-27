@@ -47,6 +47,10 @@ type AdminJoinPayload = {
 type JoinPayload = {
     eventCode: string;
     name?: string;
+    // Present when the client is silently rejoining after a dropped
+    // connection (tunnel blip, backgrounded tab) — lets us re-attach to the
+    // existing roster row instead of creating a duplicate participant.
+    participantId?: string;
 };
 
 type SetActivePayload = {
@@ -303,7 +307,15 @@ export function registerLiveEventHandlers(io: Server) {
                     return;
                 }
 
-                const participantId = crypto.randomBytes(10).toString("hex");
+                // Reuse the client's previously-issued participantId if it's
+                // still valid for this event (a genuine reconnect); otherwise
+                // this is a first-time join and gets a fresh one.
+                const isReconnect =
+                    !!payload.participantId &&
+                    (await liveEventRepo.participantExists(ev.id, payload.participantId));
+                const participantId = isReconnect
+                    ? (payload.participantId as string)
+                    : crypto.randomBytes(10).toString("hex");
 
                 socket.data.participantId = participantId;
                 socket.data.eventCode = eventCode;
@@ -639,6 +651,20 @@ export function registerLiveEventHandlers(io: Server) {
                     activeQuestionIndex: payload.questionIndex,
                     ...results,
                 });
+
+                // Admin-only — never sent to the general room, so
+                // participants never see who else answered wrong.
+                if (!isCorrect) {
+                    const incorrectParticipants = await liveEventRepo.getIncorrectParticipants(
+                        ev.id,
+                        payload.questionIndex
+                    );
+                    io.to(adminRoom(eventCode)).emit("event:incorrectAnswers", {
+                        eventCode,
+                        questionIndex: payload.questionIndex,
+                        participants: incorrectParticipants,
+                    });
+                }
 
                 cb?.({ ok: true });
             }

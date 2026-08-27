@@ -118,6 +118,18 @@ export class PgLiveEventRepository {
         }
     }
 
+    // Lets event:join tell a genuine reconnect (client presents its
+    // previously-issued participantId) apart from a first-time join, so a
+    // dropped/reconnected socket re-attaches to its existing roster row
+    // instead of minting a duplicate participant.
+    async participantExists(liveEventId: string, participantId: string): Promise<boolean> {
+        const { rows } = await pgPool.query(
+            "SELECT 1 FROM live_participants WHERE live_event_id = $1 AND participant_id = $2",
+            [liveEventId, participantId]
+        );
+        return rows.length > 0;
+    }
+
     async addParticipant(liveEventId: string, participantId: string, name?: string): Promise<void> {
         await pgPool.query(
             `INSERT INTO live_participants (live_event_id, participant_id, name)
@@ -144,6 +156,24 @@ export class PgLiveEventRepository {
             [liveEventId, participantId, questionIndex, optionIndex, isCorrect]
         );
         return (rowCount ?? 0) > 0;
+    }
+
+    // Names for the host's "who got it wrong" roster — admin-only (never
+    // sent to the general room, same rule as listParticipants).
+    async getIncorrectParticipants(
+        liveEventId: string,
+        questionIndex: number
+    ): Promise<{ participantId: string; name: string | null }[]> {
+        const { rows } = await pgPool.query<{ participant_id: string; name: string | null }>(
+            `SELECT p.participant_id, p.name
+             FROM live_responses r
+             JOIN live_participants p
+               ON p.live_event_id = r.live_event_id AND p.participant_id = r.participant_id
+             WHERE r.live_event_id = $1 AND r.question_index = $2 AND r.is_correct = false
+             ORDER BY p.joined_at`,
+            [liveEventId, questionIndex]
+        );
+        return rows.map((r) => ({ participantId: r.participant_id, name: r.name }));
     }
 
     async getAnswerCountsByOption(
