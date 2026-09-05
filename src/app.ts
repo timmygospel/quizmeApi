@@ -20,6 +20,7 @@ import analyticsRoutes from "./modules/analytics/infra/http/analyticsRoutes";
 import userRoutes from "./modules/users/infra/http/userRoutes";
 import rolesRoutes from "./modules/roles/infra/http/rolesRoutes";
 import assessmentRoutes from "./modules/assessment/infra/http/assessmentRoutes";
+import testSessionRoutes from "./modules/testSession/infra/http/testSessionRoutes";
 
 const app = express();
 
@@ -81,6 +82,7 @@ app.use("/api/v1", analyticsRoutes);
 app.use("/api/v1", userRoutes);
 app.use("/api/v1", rolesRoutes);
 app.use("/api/v1", assessmentRoutes);
+app.use("/api/v1", testSessionRoutes);
 app.use("/api/v1", createMeRoutes(authProvider));
 
 export default app;

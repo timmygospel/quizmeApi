@@ -494,3 +494,116 @@ CREATE TABLE IF NOT EXISTS assessment_question_options (
 CREATE UNIQUE INDEX IF NOT EXISTS users_auth_provider_identity_idx
     ON users (auth_provider, auth_provider_user_id)
     WHERE auth_provider IS NOT NULL AND auth_provider_user_id IS NOT NULL;
+
+-- ---------------------------------------------------------------------------
+-- Test Sessions (SESSION-BE-002) — timed delivery of one immutable published
+-- Assessment to an organisational audience (location/department/optional
+-- team), resolved at creation time into explicit participant assignments.
+-- Deliberately independent of the quiz-based `sessions`/`session_participant`/
+-- `session_attempt`/`session_response` tables above, which remain the
+-- liveEvents/analytics stack for quiz-template delivery — a Test Session
+-- delivers an Assessment, not a Quiz, and is a distinct bounded context.
+-- assessment_id doubles as "assessment_version_id": a PUBLISHED assessments
+-- row (and its assessment_questions/options) is immutable — see
+-- UpdateAssessmentUseCase's ASSESSMENT_PUBLISHED_IMMUTABLE rule — so no
+-- separate assessment_versions table is needed.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS test_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    assessment_id UUID NOT NULL REFERENCES assessments(id),
+    name TEXT NOT NULL,
+    owner_id UUID NOT NULL REFERENCES users(id),
+    available_from TIMESTAMPTZ NOT NULL,
+    available_until TIMESTAMPTZ NOT NULL,
+    time_limit_minutes INTEGER NOT NULL CHECK (time_limit_minutes > 0),
+    max_attempts INTEGER NOT NULL DEFAULT 1 CHECK (max_attempts > 0),
+    status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT', 'SCHEDULED', 'OPEN', 'CLOSED', 'COMPLETED', 'CANCELLED')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at TIMESTAMPTZ,
+    closed_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- A Test Session may have one or more audience rules (e.g. Birmingham+Sales,
+-- Manchester+Sales). team_id is a bare nullable id with no FK — this
+-- codebase has no `teams` table anywhere (see the user_role_locations/
+-- user_role_departments comment above), and the spec only requires team to
+-- be optional, not a first-class managed entity.
+CREATE TABLE IF NOT EXISTS test_session_audiences (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    test_session_id UUID NOT NULL REFERENCES test_sessions(id) ON DELETE CASCADE,
+    location_id UUID NOT NULL REFERENCES locations(id),
+    department_id UUID NOT NULL REFERENCES departments(id),
+    team_id UUID
+);
+
+-- Audience resolved into explicit participants at creation time (never
+-- recomputed dynamically at reporting time), with the participant's
+-- organisational assignment snapshotted for historic reporting — if they
+-- later move department/location, this row keeps reporting under where they
+-- were assigned for this Test Session.
+CREATE TABLE IF NOT EXISTS test_session_participants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    test_session_id UUID NOT NULL REFERENCES test_sessions(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id),
+    location_id UUID REFERENCES locations(id),
+    location_name_snapshot TEXT,
+    department_id UUID REFERENCES departments(id),
+    department_name_snapshot TEXT,
+    team_id UUID,
+    team_name_snapshot TEXT,
+    status TEXT NOT NULL DEFAULT 'ASSIGNED' CHECK (status IN ('ASSIGNED', 'NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'TIMED_OUT', 'EXPIRED')),
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    UNIQUE (test_session_id, user_id)
+);
+
+-- expires_at = min(started_at + time_limit, session.available_until) — see
+-- attemptExpiry.ts. Server-authoritative: every response/submit endpoint
+-- checks this, never the frontend's own timer.
+CREATE TABLE IF NOT EXISTS test_attempts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    test_session_id UUID NOT NULL REFERENCES test_sessions(id) ON DELETE CASCADE,
+    test_session_participant_id UUID NOT NULL REFERENCES test_session_participants(id) ON DELETE CASCADE,
+    attempt_number INTEGER NOT NULL DEFAULT 1,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    submitted_at TIMESTAMPTZ,
+    status TEXT NOT NULL DEFAULT 'IN_PROGRESS' CHECK (status IN ('IN_PROGRESS', 'SUBMITTED', 'TIMED_OUT')),
+    score_percentage NUMERIC(5, 2),
+    passed BOOLEAN,
+    UNIQUE (test_session_participant_id, attempt_number)
+);
+
+-- One row per answered question — the UNIQUE constraint is the idempotent
+-- upsert target for PUT .../questions/:questionId/response (changing an
+-- answer updates this row rather than creating a duplicate). A question with
+-- no row here is simply unanswered, which scoreAttempt.ts treats as incorrect.
+CREATE TABLE IF NOT EXISTS test_attempt_responses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    test_attempt_id UUID NOT NULL REFERENCES test_attempts(id) ON DELETE CASCADE,
+    assessment_question_id UUID NOT NULL REFERENCES assessment_questions(id),
+    selected_option_id UUID REFERENCES assessment_question_options(id),
+    is_correct BOOLEAN,
+    answered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (test_attempt_id, assessment_question_id)
+);
+
+-- ---------------------------------------------------------------------------
+-- Audit log (SESSION-BE-002) — minimal insert-only trail shared across
+-- modules. No read API yet (none was requested); audit.view is already
+-- seeded in the permission catalogue above for a future admin screen to
+-- query this table directly.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS audit_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    actor_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    event_type TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id UUID,
+    metadata JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
