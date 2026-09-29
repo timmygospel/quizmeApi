@@ -1,9 +1,7 @@
 import { QuestionDTO } from "../shared/QuestionDTO";
+import { SectionInputDTO } from "../shared/SectionInputDTO";
 
-export interface SectionInputDTO {
-    name: string;
-    questionIds?: string[];
-}
+export { SectionInputDTO };
 
 export interface CreateQuizDTO {
     title: string;

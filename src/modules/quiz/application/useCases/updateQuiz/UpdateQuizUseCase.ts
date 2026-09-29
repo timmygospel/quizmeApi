@@ -4,11 +4,12 @@ import { UseCase } from "../../../../../shared/core/UseCase";
 import { Result } from "../../../../../shared/core/Result";
 import { Quiz } from "../../../domain/Quiz";
 import { QuizTitle } from "../../../domain/valueObjects/QuizTitle";
-import { Question } from "../../../domain/Question";
-import { QuestionText } from "../../../domain/valueObjects/QuestionText";
-import { Option } from "../../../domain/Option";
-import { OptionText } from "../../../domain/valueObjects/OptionText";
+import { buildQuizContent } from "../shared/buildQuizContent";
 
+/**
+ * Upserts the quiz's questions and sections. Sections omitted from
+ * `sections` are deleted; their questions stay in the quiz, Unassigned.
+ */
 export class UpdateQuizUseCase implements UseCase<UpdateQuizDTO, Promise<Result<Quiz>>> {
     constructor(private quizRepo: IQuizRepository) { }
 
@@ -17,7 +18,7 @@ export class UpdateQuizUseCase implements UseCase<UpdateQuizDTO, Promise<Result<
             // ✅ 1. Find existing quiz
             const existingQuiz = await this.quizRepo.findById(dto.id);
             if (!existingQuiz) {
-                return Result.fail(`Quiz with id ${dto.id} not found`);
+                return Result.fail(`NOT_FOUND: Quiz with id ${dto.id} not found`);
             }
 
             // ✅ 2. Validate title (if provided)
@@ -30,49 +31,17 @@ export class UpdateQuizUseCase implements UseCase<UpdateQuizDTO, Promise<Result<
                 title = titleOrError.getValue();
             }
 
-            // ✅ 3. Map and validate questions (if provided)
-            let questions = existingQuiz.questions;
-            if (dto.questions) {
-                questions = dto.questions
-                    .filter((q) => q.question && q.question.trim().length > 0)
-                    .map((q) => {
-                        const questionTextOrError = QuestionText.create(q.question);
-                        if (questionTextOrError.isFailure) {
-                            throw new Error(questionTextOrError.errorValue());
-                        }
+            // ✅ 3. Map and validate questions + sections (each only if provided)
+            const contentOrError = await buildQuizContent(this.quizRepo, {
+                quizId: existingQuiz.id,
+                questions: dto.questions,
+                sections: dto.sections,
+                existing: existingQuiz,
+            });
+            if (contentOrError.isFailure) return Result.fail(contentOrError.errorValue());
+            const { questions, sections } = contentOrError.getValue();
 
-                        const options = q.options
-                            .filter((o) => o.text && o.text.trim().length > 0)
-                            .map((o) => {
-                                const optionTextOrError = OptionText.create(o.text);
-                                if (optionTextOrError.isFailure) {
-                                    throw new Error(optionTextOrError.errorValue());
-                                }
-
-                                return new Option({
-                                    id: o.id,
-                                    text: optionTextOrError.getValue(),
-                                    correct: o.correct,
-                                });
-                            });
-
-                        return new Question({
-                            id: q.id,
-                            question: questionTextOrError.getValue(),
-                            options,
-                        });
-                    });
-            }
-
-            // ✅ 4. Map and validate sections (if provided)
-            let sections = existingQuiz.sections;
-            if (dto.sections) {
-                sections = dto.sections
-                    .filter((s) => s.name && s.name.trim().length > 0)
-                    .map((s) => ({ id: s.id, name: s.name.trim(), questionIds: s.questionIds ?? [] }));
-            }
-
-            // ✅ 5. Build updated domain object
+            // ✅ 4. Build updated domain object
             const updatedQuiz = new Quiz({
                 id: existingQuiz.id,
                 title,
@@ -82,13 +51,13 @@ export class UpdateQuizUseCase implements UseCase<UpdateQuizDTO, Promise<Result<
                 updatedAt: new Date(),
             });
 
-            // ✅ 6. Persist update
+            // ✅ 5. Persist update
             const savedQuiz = await this.quizRepo.save(updatedQuiz);
 
-            // ✅ 7. Return success
+            // ✅ 6. Return success
             return Result.ok(savedQuiz);
         } catch (error: any) {
-            return Result.fail(`Failed to update quiz: ${error.message ?? error}`);
+            return Result.fail(`UNEXPECTED: Failed to update quiz: ${error?.message ?? error}`);
         }
     }
 }

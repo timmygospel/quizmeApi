@@ -1,18 +1,9 @@
-import { QuestionDTO } from "../../../dtos/QuestionDTO";
-
-export interface UpdateSectionInputDTO {
-    id?: string;
-    name: string;
-    questionIds?: string[];
-}
+import { QuestionDTO } from "../shared/QuestionDTO";
+import { SectionInputDTO } from "../shared/SectionInputDTO";
 
 export interface UpdateQuizDTO {
     id: string; // ✅ must exist
-    title: string;
-    questions: {
-        id?: string;
-        question: string;
-        options: { id?: string; text: string; correct: boolean }[];
-    }[];
-    sections?: UpdateSectionInputDTO[];
+    title?: string;
+    questions?: QuestionDTO[];
+    sections?: SectionInputDTO[];
 }

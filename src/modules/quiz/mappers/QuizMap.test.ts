@@ -9,8 +9,8 @@ describe("QuizMap.toDomain", () => {
             updated_at: new Date("2026-01-02T00:00:00Z"),
         },
         questions: [
-            { id: "q1", quiz_id: "quiz-1", question_text: "What do you do first?", display_order: 0 },
-            { id: "q2", quiz_id: "quiz-1", question_text: "Where is the exit?", display_order: 1 },
+            { id: "q1", quiz_id: "quiz-1", question_text: "What do you do first?", display_order: 0, section_id: "s1", section_position: 0 },
+            { id: "q2", quiz_id: "quiz-1", question_text: "Where is the exit?", display_order: 1, section_id: null, section_position: null },
         ],
         options: [
             { id: "o1", question_id: "q1", text: "Call for help", is_correct: true, display_order: 0 },
@@ -18,7 +18,6 @@ describe("QuizMap.toDomain", () => {
             { id: "o3", question_id: "q2", text: "North exit", is_correct: true, display_order: 0 },
         ],
         sections: [{ id: "s1", quiz_id: "quiz-1", name: "Basics", display_order: 0 }],
-        sectionQuestions: [{ section_id: "s1", question_id: "q1" }],
     };
 
     it("reassembles questions in display order with their options", () => {
@@ -32,7 +31,7 @@ describe("QuizMap.toDomain", () => {
         expect(quiz.questions[0].options[0].correct).toBe(true);
     });
 
-    it("attaches a section's questionIds from the join rows", () => {
+    it("attaches a section's questionIds from the questions' section_id", () => {
         const quiz = QuizMap.toDomain(baseRows);
 
         expect(quiz.sections).toHaveLength(1);
@@ -48,5 +47,38 @@ describe("QuizMap.toDomain", () => {
         expect(dto.questions).toHaveLength(2);
         expect(dto.questions[1].options[0].correct).toBe(true);
         expect(dto.sections[0].questionIds).toEqual(["q1"]);
+    });
+
+    it("orders a section's questions by section_position, not quiz display order", () => {
+        const quiz = QuizMap.toDomain({
+            ...baseRows,
+            questions: [
+                { ...baseRows.questions[0], section_id: "s1", section_position: 1 },
+                { ...baseRows.questions[1], section_id: "s1", section_position: 0 },
+            ],
+        });
+
+        expect(quiz.sections[0].questionIds).toEqual(["q2", "q1"]);
+        expect(quiz.questions.map((q) => q.id)).toEqual(["q1", "q2"]);
+    });
+
+    it("exposes each question's sectionId and the Unassigned questions on the DTO", () => {
+        const dto = QuizMap.toDTO(QuizMap.toDomain(baseRows));
+
+        expect(dto.questions.map((q) => q.sectionId)).toEqual(["s1", null]);
+        expect(dto.unassignedQuestionIds).toEqual(["q2"]);
+    });
+
+    it("returns sections in display order", () => {
+        const quiz = QuizMap.toDomain({
+            ...baseRows,
+            sections: [
+                { id: "s1", quiz_id: "quiz-1", name: "Basics", display_order: 0 },
+                { id: "s2", quiz_id: "quiz-1", name: "Advanced", display_order: 1 },
+            ],
+        });
+
+        expect(quiz.sections.map((s) => s.name)).toEqual(["Basics", "Advanced"]);
+        expect(quiz.sections[1].questionIds).toEqual([]);
     });
 });

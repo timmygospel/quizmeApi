@@ -2,6 +2,7 @@ import { TestSession, TestSessionStatus } from "./TestSession";
 import { TestSessionParticipant, ParticipantStatus } from "./TestSessionParticipant";
 import { AudienceRule } from "./AudienceRule";
 import { EffectiveScope } from "../../../shared/core/EffectiveScope";
+import { ParticipantRowDTO } from "../dtos/TestSessionDTO";
 
 export interface AudienceMatch {
     userId: string;
@@ -85,4 +86,5 @@ export interface ITestSessionRepository {
 
     getResults(testSessionId: string): Promise<ResultsSummary>;
     getAnalyticsBreakdown(testSessionId: string, groupBy: AnalyticsGroupBy): Promise<AnalyticsGroup[]>;
+    getParticipants(testSessionId: string): Promise<ParticipantRowDTO[]>;
 }

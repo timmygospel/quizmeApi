@@ -295,8 +295,8 @@ export class PgAnalyticsRepository implements IAnalyticsRepository {
                 COUNT(*) AS response_count
              FROM session_response sr
              JOIN session_attempt sa ON sa.id = sr.session_attempt_id
-             JOIN quiz_section_questions qsq ON qsq.question_id = sr.quiz_question_id
-             JOIN quiz_sections qs ON qs.id = qsq.section_id
+             JOIN quiz_questions qq ON qq.id = sr.quiz_question_id
+             JOIN quiz_sections qs ON qs.id = qq.section_id
              ${sessionScopeConditions.length ? "JOIN sessions s ON s.id = sa.session_id" : ""}
              WHERE ${conditions.join(" AND ")}
              GROUP BY qs.id, qs.name`,

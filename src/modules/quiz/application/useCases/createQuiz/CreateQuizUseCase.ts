@@ -1,13 +1,10 @@
 import { IQuizRepository } from "../../../domain/IQuizRepository";
 import { CreateQuizDTO } from "./createQuizDTO";
 import { Quiz } from "../../../domain/Quiz";
-import { Question } from "../../../domain/Question";
-import { Option } from "../../../domain/Option";
 import { QuizTitle } from "../../../domain/valueObjects/QuizTitle";
-import { QuestionText } from "../../../domain/valueObjects/QuestionText";
-import { OptionText } from "../../../domain/valueObjects/OptionText";
 import { Result } from "../../../../../shared/core/Result";
 import { UseCase } from "../../../../../shared/core/UseCase";
+import { buildQuizContent } from "../shared/buildQuizContent";
 
 export class CreateQuizUseCase implements UseCase<CreateQuizDTO, Promise<Result<Quiz>>> {
     constructor(private quizRepo: IQuizRepository) { }
@@ -18,29 +15,16 @@ export class CreateQuizUseCase implements UseCase<CreateQuizDTO, Promise<Result<
             const titleOrError = QuizTitle.create(dto.title);
             if (titleOrError.isFailure) return Result.fail(titleOrError.errorValue());
 
-            // ✅ 2. Build Questions + Options (all VOs)
-            const questions = (dto.questions ?? []).map((q) => {
-                const questionTextOrError = QuestionText.create(q.question);
-                if (questionTextOrError.isFailure) throw new Error(questionTextOrError.errorValue());
+            // ✅ 2. Build Questions + Sections — client question/section ids are kept,
+            // so questions can be assigned to sections before the quiz is first saved
+            const contentOrError = await buildQuizContent(this.quizRepo, {
+                questions: dto.questions ?? [],
+                sections: dto.sections ?? [],
+            });
+            if (contentOrError.isFailure) return Result.fail(contentOrError.errorValue());
+            const { questions, sections } = contentOrError.getValue();
 
-                const options = q.options.map((o) => {
-                    const optionTextOrError = OptionText.create(o.text);
-                    if (optionTextOrError.isFailure) throw new Error(optionTextOrError.errorValue());
-                    return new Option({ text: optionTextOrError.getValue(), correct: o.correct });
-                });
-
-                return new Question({
-                    question: questionTextOrError.getValue(),
-                    options,
-                });
-            }) || [];
-
-            // ✅ 3. Build Sections (optional — plain data, no VO invariants beyond a name)
-            const sections = (dto.sections ?? [])
-                .filter((s) => s.name && s.name.trim().length > 0)
-                .map((s) => ({ name: s.name.trim(), questionIds: s.questionIds ?? [] }));
-
-            // ✅ 4. Build the Aggregate Root (Quiz)
+            // ✅ 3. Build the Aggregate Root (Quiz)
             const quiz = new Quiz({
                 title: titleOrError.getValue(),
                 questions,
@@ -52,8 +36,8 @@ export class CreateQuizUseCase implements UseCase<CreateQuizDTO, Promise<Result<
 
             // ✅ 5. Return success
             return Result.ok(savedQuiz);
-        } catch (error) {
-            return Result.fail(`Failed to create quiz: ${error}`);
+        } catch (error: any) {
+            return Result.fail(`UNEXPECTED: Failed to create quiz: ${error?.message ?? error}`);
         }
     }
 }

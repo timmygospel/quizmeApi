@@ -21,3 +21,20 @@ export interface TestSessionDTO {
     closedAt?: string | null;
     updatedAt?: string;
 }
+
+// GET /test-sessions/:id/participants — one row per assigned participant,
+// admin/trainer-facing (session.manage), for the Participants tab.
+export interface ParticipantRowDTO {
+    id: string;
+    userId: string;
+    name: string;
+    location: string | null;
+    department: string | null;
+    team: string | null;
+    status: string;
+    assignedAt: string;
+    startedAt: string | null;
+    completedAt: string | null;
+    scorePercentage: number | null;
+    passed: boolean | null;
+}

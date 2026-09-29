@@ -21,6 +21,7 @@ function makeTestSessionRepo(overrides: Partial<ITestSessionRepository> = {}): I
         findMyTestSessions: jest.fn(),
         getResults: jest.fn(),
         getAnalyticsBreakdown: jest.fn(),
+        getParticipants: jest.fn(),
         ...overrides,
     };
 }

@@ -1,7 +1,7 @@
 import { Quiz } from "../domain/Quiz";
 import { Question } from "../domain/Question";
 import { Option } from "../domain/Option";
-import { QuizDTO } from "../application/useCases/getQuiz/GetQuizDTO";
+import { QuizDTO, QuestionDTO } from "../application/useCases/getQuiz/GetQuizDTO";
 import { QuizTitle } from "../domain/valueObjects/QuizTitle";
 import { QuestionText } from "../domain/valueObjects/QuestionText";
 import { OptionText } from "../domain/valueObjects/OptionText";
@@ -18,6 +18,8 @@ export interface QuestionRow {
     quiz_id: string;
     question_text: string;
     display_order: number;
+    section_id: string | null;
+    section_position: number | null;
 }
 
 export interface OptionRow {
@@ -35,17 +37,11 @@ export interface SectionRow {
     display_order: number;
 }
 
-export interface SectionQuestionRow {
-    section_id: string;
-    question_id: string;
-}
-
 export interface QuizRows {
     quiz: QuizRow;
     questions: QuestionRow[];
     options: OptionRow[];
     sections: SectionRow[];
-    sectionQuestions: SectionQuestionRow[];
 }
 
 export class QuizMap {
@@ -84,10 +80,13 @@ export class QuizMap {
         });
 
         const questionIdsBySection = new Map<string, string[]>();
-        for (const sq of raw.sectionQuestions) {
-            const list = questionIdsBySection.get(sq.section_id) ?? [];
-            list.push(sq.question_id);
-            questionIdsBySection.set(sq.section_id, list);
+        const bySectionPosition = [...raw.questions]
+            .filter((q) => q.section_id)
+            .sort((a, b) => (a.section_position ?? 0) - (b.section_position ?? 0));
+        for (const q of bySectionPosition) {
+            const list = questionIdsBySection.get(q.section_id!) ?? [];
+            list.push(q.id);
+            questionIdsBySection.set(q.section_id!, list);
         }
 
         const sections = raw.sections.map((s) => ({
@@ -111,22 +110,28 @@ export class QuizMap {
         return {
             id: quiz.id!,
             title: quiz.title.value,
-            questions: quiz.questions.map((q) => ({
-                id: q.id,
-                question: q.question.value,
-                options: q.options.map((o) => ({
-                    id: o.id,
-                    text: o.text.value,
-                    correct: o.correct,
-                })),
-            })),
+            questions: quiz.questions.map((q) => QuizMap.questionToDTO(q, quiz.sectionIdOf(q.id))),
             sections: quiz.sections.map((s) => ({
                 id: s.id!,
                 name: s.name,
                 questionIds: s.questionIds,
             })),
+            unassignedQuestionIds: quiz.unassignedQuestionIds,
             createdAt: quiz.createdAt.toISOString(),
             updatedAt: quiz.updatedAt.toISOString(),
+        };
+    }
+
+    public static questionToDTO(q: Question, sectionId: string | null): QuestionDTO {
+        return {
+            id: q.id,
+            question: q.question.value,
+            options: q.options.map((o) => ({
+                id: o.id,
+                text: o.text.value,
+                correct: o.correct,
+            })),
+            sectionId,
         };
     }
 }

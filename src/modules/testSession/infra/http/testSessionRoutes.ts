@@ -14,6 +14,7 @@ import { CloseTestSessionUseCase } from "../../application/useCases/closeTestSes
 import { CancelTestSessionUseCase } from "../../application/useCases/cancelTestSession/CancelTestSessionUseCase";
 import { GetResultsUseCase } from "../../application/useCases/getResults/GetResultsUseCase";
 import { GetAnalyticsBreakdownUseCase } from "../../application/useCases/getAnalyticsBreakdown/GetAnalyticsBreakdownUseCase";
+import { GetParticipantsUseCase } from "../../application/useCases/getParticipants/GetParticipantsUseCase";
 import { GetMyTestSessionsUseCase } from "../../application/useCases/getMyTestSessions/GetMyTestSessionsUseCase";
 import { StartAttemptUseCase } from "../../application/useCases/startAttempt/StartAttemptUseCase";
 import { SaveResponseUseCase } from "../../application/useCases/saveResponse/SaveResponseUseCase";
@@ -27,6 +28,7 @@ import { CloseTestSessionController } from "./controllers/CloseTestSessionContro
 import { CancelTestSessionController } from "./controllers/CancelTestSessionController";
 import { GetResultsController } from "./controllers/GetResultsController";
 import { GetAnalyticsBreakdownController } from "./controllers/GetAnalyticsBreakdownController";
+import { GetParticipantsController } from "./controllers/GetParticipantsController";
 import { GetMyTestSessionsController } from "./controllers/GetMyTestSessionsController";
 import { StartAttemptController } from "./controllers/StartAttemptController";
 import { SaveResponseController } from "./controllers/SaveResponseController";
@@ -68,6 +70,7 @@ const getResultsController = new GetResultsController(new GetResultsUseCase(test
 const getAnalyticsBreakdownController = new GetAnalyticsBreakdownController(
     new GetAnalyticsBreakdownUseCase(testSessionRepo)
 );
+const getParticipantsController = new GetParticipantsController(new GetParticipantsUseCase(testSessionRepo));
 const getMyTestSessionsController = new GetMyTestSessionsController(new GetMyTestSessionsUseCase(testSessionRepo));
 const startAttemptController = new StartAttemptController(
     new StartAttemptUseCase(testSessionRepo, attemptRepo, assessmentRepo)
@@ -134,6 +137,13 @@ router.get(
     requirePermission("session.manage"),
     applyEffectiveScope,
     (req, res) => getAnalyticsBreakdownController.execute(req, res)
+);
+router.get(
+    "/test-sessions/:id/participants",
+    requireAuthenticatedUser,
+    requirePermission("session.manage"),
+    applyEffectiveScope,
+    (req, res) => getParticipantsController.execute(req, res)
 );
 router.get("/me/test-sessions", requireAuthenticatedUser, (req, res) => getMyTestSessionsController.execute(req, res));
 router.post("/test-sessions/:sessionId/attempts", requireAuthenticatedUser, (req, res) =>

@@ -31,8 +31,10 @@ export class PgQuizRepository implements IQuizRepository {
     }
 
     // Preserves explicit ids for questions/options/sections (round-tripped
-    // from a prior load) — new items get a fresh id minted here, up front,
-    // so sections can reference brand-new questions within the same save.
+    // from a prior load, or client-minted) — new items get a fresh id minted
+    // here. Sections are written before questions because each question row
+    // carries its (quiz_id, section_id) composite FK; any section left out of
+    // the save is deleted and its questions come back Unassigned.
     async save(quiz: Quiz): Promise<Quiz> {
         const client = await pgPool.connect();
         const quizId = quiz.id ?? randomUUID();
@@ -48,32 +50,10 @@ export class PgQuizRepository implements IQuizRepository {
             );
 
             await client.query("DELETE FROM quiz_questions WHERE quiz_id = $1", [quizId]);
-
-            const resolvedQuestionIds: string[] = [];
-            for (let i = 0; i < quiz.questions.length; i++) {
-                const q = quiz.questions[i];
-                const questionId = q.id ?? randomUUID();
-                resolvedQuestionIds.push(questionId);
-
-                await client.query(
-                    `INSERT INTO quiz_questions (id, quiz_id, question_text, display_order)
-                     VALUES ($1, $2, $3, $4)`,
-                    [questionId, quizId, q.question.value, i]
-                );
-
-                for (let j = 0; j < q.options.length; j++) {
-                    const o = q.options[j];
-                    const optionId = o.id ?? randomUUID();
-                    await client.query(
-                        `INSERT INTO quiz_question_options (id, question_id, text, is_correct, display_order)
-                         VALUES ($1, $2, $3, $4, $5)`,
-                        [optionId, questionId, o.text.value, o.correct, j]
-                    );
-                }
-            }
-
             await client.query("DELETE FROM quiz_sections WHERE quiz_id = $1", [quizId]);
 
+            // questionId -> its section and position within that section
+            const placement = new Map<string, { sectionId: string; position: number }>();
             for (let i = 0; i < quiz.sections.length; i++) {
                 const s = quiz.sections[i];
                 const sectionId = s.id ?? randomUUID();
@@ -84,13 +64,28 @@ export class PgQuizRepository implements IQuizRepository {
                     [sectionId, quizId, s.name, i]
                 );
 
-                for (const questionId of s.questionIds) {
-                    if (resolvedQuestionIds.includes(questionId)) {
-                        await client.query(
-                            `INSERT INTO quiz_section_questions (section_id, question_id) VALUES ($1, $2)`,
-                            [sectionId, questionId]
-                        );
-                    }
+                s.questionIds.forEach((questionId, position) => placement.set(questionId, { sectionId, position }));
+            }
+
+            for (let i = 0; i < quiz.questions.length; i++) {
+                const q = quiz.questions[i];
+                const questionId = q.id ?? randomUUID();
+                const place = q.id ? placement.get(q.id) : undefined;
+
+                await client.query(
+                    `INSERT INTO quiz_questions (id, quiz_id, question_text, display_order, section_id, section_position)
+                     VALUES ($1, $2, $3, $4, $5, $6)`,
+                    [questionId, quizId, q.question.value, i, place?.sectionId ?? null, place?.position ?? null]
+                );
+
+                for (let j = 0; j < q.options.length; j++) {
+                    const o = q.options[j];
+                    const optionId = o.id ?? randomUUID();
+                    await client.query(
+                        `INSERT INTO quiz_question_options (id, question_id, text, is_correct, display_order)
+                         VALUES ($1, $2, $3, $4, $5)`,
+                        [optionId, questionId, o.text.value, o.correct, j]
+                    );
                 }
             }
 
@@ -105,6 +100,24 @@ export class PgQuizRepository implements IQuizRepository {
         const saved = await this.findById(quizId);
         if (!saved) throw new Error("Quiz not found after save");
         return saved;
+    }
+
+    async findQuestionQuizIds(questionIds: string[]): Promise<Map<string, string>> {
+        if (questionIds.length === 0) return new Map();
+        const { rows } = await pgPool.query<{ id: string; quiz_id: string }>(
+            "SELECT id, quiz_id FROM quiz_questions WHERE id = ANY($1::uuid[])",
+            [questionIds]
+        );
+        return new Map(rows.map((r) => [r.id, r.quiz_id]));
+    }
+
+    async findSectionQuizIds(sectionIds: string[]): Promise<Map<string, string>> {
+        if (sectionIds.length === 0) return new Map();
+        const { rows } = await pgPool.query<{ id: string; quiz_id: string }>(
+            "SELECT id, quiz_id FROM quiz_sections WHERE id = ANY($1::uuid[])",
+            [sectionIds]
+        );
+        return new Map(rows.map((r) => [r.id, r.quiz_id]));
     }
 
     async delete(id: string): Promise<void> {
@@ -132,18 +145,12 @@ export class PgQuizRepository implements IQuizRepository {
             "SELECT * FROM quiz_sections WHERE quiz_id = $1 ORDER BY display_order",
             [id]
         );
-        const sectionIds = sectionsRes.rows.map((r) => r.id);
-
-        const sectionQuestionsRes = sectionIds.length
-            ? await client.query("SELECT * FROM quiz_section_questions WHERE section_id = ANY($1)", [sectionIds])
-            : { rows: [] as any[] };
 
         return QuizMap.toDomain({
             quiz: quizRes.rows[0],
             questions: questionsRes.rows,
             options: optionsRes.rows,
             sections: sectionsRes.rows,
-            sectionQuestions: sectionQuestionsRes.rows,
         });
     }
 }

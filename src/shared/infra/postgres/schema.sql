@@ -44,23 +44,9 @@ CREATE TABLE IF NOT EXISTS quizzes (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS quiz_questions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    quiz_id UUID NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
-    question_text TEXT NOT NULL,
-    display_order INTEGER NOT NULL,
-    UNIQUE (quiz_id, display_order)
-);
-
-CREATE TABLE IF NOT EXISTS quiz_question_options (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    question_id UUID NOT NULL REFERENCES quiz_questions(id) ON DELETE CASCADE,
-    text TEXT NOT NULL,
-    is_correct BOOLEAN NOT NULL DEFAULT false,
-    display_order INTEGER NOT NULL,
-    UNIQUE (question_id, display_order)
-);
-
+-- A section is a named, ordered group inside one quiz; it cannot exist
+-- without its quiz. UNIQUE (quiz_id, id) is the target of the composite FK
+-- on quiz_questions below.
 CREATE TABLE IF NOT EXISTS quiz_sections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     quiz_id UUID NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
@@ -69,13 +55,87 @@ CREATE TABLE IF NOT EXISTS quiz_sections (
     UNIQUE (quiz_id, display_order)
 );
 
--- A section groups a subset of its quiz's own questions (Quiz.QuizSection in
--- the domain layer). No display_order of its own — question order within a
--- section follows quiz_questions.display_order.
-CREATE TABLE IF NOT EXISTS quiz_section_questions (
-    section_id UUID NOT NULL REFERENCES quiz_sections(id) ON DELETE CASCADE,
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'quiz_sections_quiz_id_id_key') THEN
+        ALTER TABLE quiz_sections ADD CONSTRAINT quiz_sections_quiz_id_id_key UNIQUE (quiz_id, id);
+    END IF;
+END $$;
+
+-- section_id NULL = Unassigned. A question belongs to at most one section
+-- (it's a column, not a join table), and section_position is its order
+-- within that section. The composite FK on (quiz_id, section_id) guarantees
+-- the section belongs to the question's own quiz.
+CREATE TABLE IF NOT EXISTS quiz_questions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    quiz_id UUID NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+    question_text TEXT NOT NULL,
+    display_order INTEGER NOT NULL,
+    section_id UUID,
+    section_position INTEGER,
+    UNIQUE (quiz_id, display_order)
+);
+
+ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS section_id UUID;
+ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS section_position INTEGER;
+
+-- One-off migration from the old many-to-many quiz_section_questions join
+-- table. Only same-quiz pairs are carried over; a question that was in more
+-- than one section keeps its earliest section (by section display_order).
+-- Order within a section follows the question's old display_order. The old
+-- table is dropped afterwards, so this is a no-op on every later run.
+DO $$
+BEGIN
+    IF to_regclass('quiz_section_questions') IS NOT NULL THEN
+        UPDATE quiz_questions q
+        SET section_id = m.section_id,
+            section_position = m.section_position
+        FROM (
+            SELECT question_id,
+                   section_id,
+                   (ROW_NUMBER() OVER (PARTITION BY section_id ORDER BY question_display_order) - 1)::int AS section_position
+            FROM (
+                SELECT DISTINCT ON (qsq.question_id)
+                       qsq.question_id,
+                       qsq.section_id,
+                       qq.display_order AS question_display_order
+                FROM quiz_section_questions qsq
+                JOIN quiz_sections s ON s.id = qsq.section_id
+                JOIN quiz_questions qq ON qq.id = qsq.question_id AND qq.quiz_id = s.quiz_id
+                ORDER BY qsq.question_id, s.display_order
+            ) firsts
+        ) m
+        WHERE q.id = m.question_id;
+
+        DROP TABLE quiz_section_questions;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'quiz_questions_section_fk') THEN
+        ALTER TABLE quiz_questions
+            ADD CONSTRAINT quiz_questions_section_fk
+            FOREIGN KEY (quiz_id, section_id) REFERENCES quiz_sections (quiz_id, id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'quiz_questions_section_position_check') THEN
+        ALTER TABLE quiz_questions
+            ADD CONSTRAINT quiz_questions_section_position_check
+            CHECK ((section_id IS NULL) = (section_position IS NULL));
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'quiz_questions_section_position_key') THEN
+        ALTER TABLE quiz_questions
+            ADD CONSTRAINT quiz_questions_section_position_key UNIQUE (section_id, section_position);
+    END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS quiz_question_options (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     question_id UUID NOT NULL REFERENCES quiz_questions(id) ON DELETE CASCADE,
-    PRIMARY KEY (section_id, question_id)
+    text TEXT NOT NULL,
+    is_correct BOOLEAN NOT NULL DEFAULT false,
+    display_order INTEGER NOT NULL,
+    UNIQUE (question_id, display_order)
 );
 
 -- ---------------------------------------------------------------------------

@@ -13,6 +13,8 @@ import { GetAssessmentController } from "./controllers/GetAssessmentController";
 import { UpdateAssessmentController } from "./controllers/UpdateAssessmentController";
 import { DuplicateAssessmentController } from "./controllers/DuplicateAssessmentController";
 import { ArchiveAssessmentController } from "./controllers/ArchiveAssessmentController";
+import { PublishAssessmentUseCase } from "../../application/useCases/publishAssessment/PublishAssessmentUseCase";
+import { PublishAssessmentController } from "./controllers/PublishAssessmentController";
 import { PgUserRepository } from "../../../users/infra/db/PgUserRepository";
 import { PgRoleRepository } from "../../../roles/infra/db/PgRoleRepository";
 import {
@@ -45,6 +47,7 @@ const createAssessmentController = new CreateAssessmentController(createAssessme
 const updateAssessmentController = new UpdateAssessmentController(updateAssessmentUseCase);
 const duplicateAssessmentController = new DuplicateAssessmentController(duplicateAssessmentUseCase);
 const archiveAssessmentController = new ArchiveAssessmentController(archiveAssessmentUseCase);
+const publishAssessmentController = new PublishAssessmentController(new PublishAssessmentUseCase(repo));
 
 router.get(
     "/assessments",
@@ -87,6 +90,13 @@ router.post(
     requirePermission("assessment.archive"),
     applyEffectiveScope,
     (req, res) => archiveAssessmentController.execute(req, res)
+);
+router.post(
+    "/assessments/:id/publish",
+    requireAuthenticatedUser,
+    requirePermission("assessment.publish"),
+    applyEffectiveScope,
+    (req, res) => publishAssessmentController.execute(req, res)
 );
 
 export default router;

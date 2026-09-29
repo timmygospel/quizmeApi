@@ -69,12 +69,14 @@ src/modules/quiz/
 
 **Routes files** instantiate the dependency chain directly (no DI container): `new PgQuizRepository()` → `new CreateQuizUseCase(repo)` → `new CreateQuizController(useCase)`.
 
-Multi-table aggregates (quiz questions/options/sections; question-bank options) are persisted with a "replace on save" strategy inside a transaction: the parent row is upserted, then child rows are deleted and reinserted, preserving any ids the client round-tripped from a prior load so cross-references (e.g. a section's `questionIds`) survive an edit. See `PgQuizRepository.save()` for the reference implementation.
+Multi-table aggregates (quiz questions/options/sections; question-bank options) are persisted with a "replace on save" strategy inside a transaction: the parent row is upserted, then child rows are deleted and reinserted, preserving any ids the client round-tripped from a prior load (or minted) so cross-references (e.g. a question's `section_id`) survive an edit. See `PgQuizRepository.save()` for the reference implementation.
 
 ## Modules
 
 ### quiz
-Full DDD slice. CRUD endpoints at `/api/v1/quizzes`, plus `POST /api/v1/quizzes/:id/add-questions`. Persisted across `quizzes`/`quiz_questions`/`quiz_question_options`/`quiz_sections`/`quiz_section_questions`. A section groups a subset of its own quiz's questions by id (`{id, name, questionIds}`) — plain data, no fallback synthesis; a quiz with no authored sections simply returns an empty `sections` array.
+Full DDD slice. CRUD endpoints at `/api/v1/quizzes`, plus `GET /api/v1/quizzes/:id/sections/:sectionId/questions` (a section's questions, for knowledge checks). Persisted across `quizzes`/`quiz_questions`/`quiz_question_options`/`quiz_sections`.
+
+Sections are owned by their quiz. A question belongs to at most one section via nullable `quiz_questions.section_id` (null = Unassigned) plus `section_position`; a composite FK `(quiz_id, section_id) → quiz_sections(quiz_id, id)` guarantees the section is in the question's own quiz. Sections are managed only through quiz create/update (`template.create`/`template.edit`): omitted sections are deleted and their questions become Unassigned. `buildQuizContent` (`application/useCases/shared/`) resolves assignments from either payload shape — sections' `questionIds` (the original shape, authoritative when present) or per-question `sectionId` — and rejects cross-quiz or unknown ids with a 400. Question/section ids may be client-minted UUIDs, so new questions can go into new sections in one save. GET returns ordered sections with ordered `questionIds`, each question's `sectionId`, and `unassignedQuestionIds`.
 
 ### category
 Full DDD slice. CRUD endpoints at `/api/v1/categories`. Persisted to the `categories` table.

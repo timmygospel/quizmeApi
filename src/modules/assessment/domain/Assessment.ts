@@ -60,6 +60,10 @@ export class Assessment {
         this.updatedAt = props.updatedAt || new Date();
     }
 
+    public publish(): Assessment {
+        return new Assessment({ ...this, status: "PUBLISHED", updatedAt: new Date() });
+    }
+
     public archive(): Assessment {
         return new Assessment({ ...this, status: "ARCHIVED", updatedAt: new Date() });
     }

@@ -8,6 +8,7 @@ import {
     AnalyticsGroupBy,
     MyTestSessionRow,
 } from "../../domain/ITestSessionRepository";
+import { ParticipantRowDTO } from "../../dtos/TestSessionDTO";
 import { TestSession, TestSessionStatus } from "../../domain/TestSession";
 import { TestSessionParticipant, ParticipantStatus } from "../../domain/TestSessionParticipant";
 import { AudienceRule } from "../../domain/AudienceRule";
@@ -398,5 +399,55 @@ export class PgTestSessionRepository implements ITestSessionRepository {
                 passRate: completed > 0 ? Math.round((passed / completed) * 10000) / 100 : 0,
             };
         });
+    }
+
+    async getParticipants(testSessionId: string): Promise<ParticipantRowDTO[]> {
+        const { rows } = await pgPool.query<{
+            id: string;
+            user_id: string;
+            first_name: string;
+            last_name: string;
+            location_name_snapshot: string | null;
+            department_name_snapshot: string | null;
+            team_name_snapshot: string | null;
+            status: ParticipantStatus;
+            assigned_at: Date;
+            started_at: Date | null;
+            completed_at: Date | null;
+            score_percentage: string | number | null;
+            passed: boolean | null;
+        }>(
+            `SELECT
+                p.id, p.user_id,
+                u.first_name, u.last_name,
+                p.location_name_snapshot, p.department_name_snapshot, p.team_name_snapshot,
+                p.status, p.assigned_at, p.started_at, p.completed_at,
+                a.score_percentage, a.passed
+             FROM test_session_participants p
+             JOIN users u ON u.id = p.user_id
+             LEFT JOIN LATERAL (
+                 SELECT * FROM test_attempts ta
+                 WHERE ta.test_session_participant_id = p.id AND ta.status IN ('SUBMITTED', 'TIMED_OUT')
+                 ORDER BY ta.attempt_number DESC LIMIT 1
+             ) a ON true
+             WHERE p.test_session_id = $1
+             ORDER BY u.last_name, u.first_name`,
+            [testSessionId]
+        );
+
+        return rows.map((r) => ({
+            id: r.id,
+            userId: r.user_id,
+            name: `${r.first_name} ${r.last_name}`.trim(),
+            location: r.location_name_snapshot,
+            department: r.department_name_snapshot,
+            team: r.team_name_snapshot,
+            status: r.status,
+            assignedAt: r.assigned_at.toISOString(),
+            startedAt: r.started_at ? r.started_at.toISOString() : null,
+            completedAt: r.completed_at ? r.completed_at.toISOString() : null,
+            scorePercentage: r.score_percentage != null ? Number(r.score_percentage) : null,
+            passed: r.passed,
+        }));
     }
 }
