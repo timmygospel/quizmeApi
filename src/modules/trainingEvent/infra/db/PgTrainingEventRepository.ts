@@ -224,6 +224,21 @@ export class PgTrainingEventRepository implements ITrainingEventRepository {
         return toAttendee(rows[0]);
     }
 
+    async findOrCreateUserAttendee(eventId: string, userId: string, displayName: string): Promise<{ attendee: Attendee; created: boolean }> {
+        const inserted = await pgPool.query<AttendeeRow>(
+            `INSERT INTO training_event_attendees (training_event_id, display_name, user_id) VALUES ($1, $2, $3)
+             ON CONFLICT (training_event_id, user_id) WHERE user_id IS NOT NULL AND merged_into_id IS NULL DO NOTHING
+             RETURNING *`,
+            [eventId, displayName, userId]
+        );
+        if (inserted.rows[0]) return { attendee: toAttendee(inserted.rows[0]), created: true };
+        const { rows } = await pgPool.query<AttendeeRow>(
+            `SELECT * FROM training_event_attendees WHERE training_event_id = $1 AND user_id = $2 AND merged_into_id IS NULL`,
+            [eventId, userId]
+        );
+        return { attendee: toAttendee(rows[0]), created: false };
+    }
+
     async findAttendee(id: string): Promise<Attendee | null> {
         const { rows } = await pgPool.query<AttendeeRow>(`SELECT * FROM training_event_attendees WHERE id = $1`, [id]);
         return rows[0] ? toAttendee(rows[0]) : null;

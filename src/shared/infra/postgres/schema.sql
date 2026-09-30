@@ -738,6 +738,11 @@ CREATE TABLE IF NOT EXISTS training_event_attendees (
     last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- A signed-in employee is one attendee per event (they rejoin by signing in, never by picking a name).
+CREATE UNIQUE INDEX IF NOT EXISTS training_event_attendees_one_per_user
+    ON training_event_attendees (training_event_id, user_id)
+    WHERE user_id IS NOT NULL AND merged_into_id IS NULL;
+
 CREATE TABLE IF NOT EXISTS training_event_attendee_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     attendee_id UUID NOT NULL REFERENCES training_event_attendees(id) ON DELETE CASCADE,

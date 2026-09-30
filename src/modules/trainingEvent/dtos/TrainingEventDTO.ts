@@ -53,6 +53,8 @@ export interface PublicEventDTO {
     status: TrainingEventStatus;
     /** The attendee this browser's token belongs to, if any. */
     attendee: AttendeeDTO | null;
+    /** Set when the request is from a signed-in user: they can join as themselves, no name needed. */
+    signedInAs: string | null;
 }
 
 export interface JoinResultDTO {

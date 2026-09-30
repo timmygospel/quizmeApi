@@ -17,6 +17,8 @@ import {
     GetCurrentActivityUseCase,
     GetEventForAttendeeUseCase,
     JoinAsGuestUseCase,
+    JoinAsSignedInUserUseCase,
+    Viewer,
     ListGuestsUseCase,
     RejoinAsGuestUseCase,
     SaveCheckAnswerUseCase,
@@ -73,22 +75,30 @@ router.post("/training-events/:id/attendees/:attendeeId/merge", ...trainer,
 // ── Attendee: public, by join code + the X-Attendee-Token the browser got when joining ──
 const token = (req: Request) => req.header("x-attendee-token") || undefined;
 const code = (req: Request) => param(req, "joinCode");
+// Attendee routes are public, but a signed-in user's bearer token still identifies them (authMiddleware).
+const viewer = (req: Request): Viewer | null => {
+    const u = req.authUser;
+    if (!u?.id) return null;
+    return { id: u.id, displayName: `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.email };
+};
 
 const eventForAttendee = new GetEventForAttendeeUseCase(repo);
 const joinAsGuest = new JoinAsGuestUseCase(repo, notifier);
+const joinAsSignedInUser = new JoinAsSignedInUserUseCase(repo, notifier);
 const listGuests = new ListGuestsUseCase(repo);
 const rejoinAsGuest = new RejoinAsGuestUseCase(repo);
 const currentActivity = new GetCurrentActivityUseCase(repo);
 const saveAnswer = new SaveCheckAnswerUseCase(repo);
 const submitCheck = new SubmitCheckUseCase(repo, notifier);
 
-router.get("/attend/:joinCode", handle((req) => eventForAttendee.execute(code(req), token(req))));
+router.get("/attend/:joinCode", handle((req) => eventForAttendee.execute(code(req), token(req), viewer(req))));
 router.post("/attend/:joinCode/attendees", handle((req) => joinAsGuest.execute(code(req), req.body?.name), 201));
+router.post("/attend/:joinCode/me", requireAuthenticatedUser, handle((req) => joinAsSignedInUser.execute(code(req), viewer(req)!), 201));
 router.get("/attend/:joinCode/guests", handle((req) => listGuests.execute(code(req))));
 router.post("/attend/:joinCode/rejoin", handle((req) => rejoinAsGuest.execute(code(req), req.body?.attendeeId)));
-router.get("/attend/:joinCode/current", handle((req) => currentActivity.execute(code(req), token(req))));
+router.get("/attend/:joinCode/current", handle((req) => currentActivity.execute(code(req), token(req), viewer(req))));
 router.put("/attend/:joinCode/checks/:checkId/answers/:questionId",
-    handle((req) => saveAnswer.execute(code(req), token(req), param(req, "checkId"), param(req, "questionId"), req.body?.optionIndex)));
-router.post("/attend/:joinCode/checks/:checkId/submit", handle((req) => submitCheck.execute(code(req), token(req), param(req, "checkId"))));
+    handle((req) => saveAnswer.execute(code(req), token(req), param(req, "checkId"), param(req, "questionId"), req.body?.optionIndex, viewer(req))));
+router.post("/attend/:joinCode/checks/:checkId/submit", handle((req) => submitCheck.execute(code(req), token(req), param(req, "checkId"), viewer(req))));
 
 export default router;

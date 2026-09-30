@@ -51,6 +51,8 @@ export interface ITrainingEventRepository {
 
     createAttendee(eventId: string, displayName: string, userId: string | null): Promise<Attendee>;
     findAttendee(id: string): Promise<Attendee | null>;
+    /** The signed-in user's attendee record for this event, created on first join. */
+    findOrCreateUserAttendee(eventId: string, userId: string, displayName: string): Promise<{ attendee: Attendee; created: boolean }>;
     /** Guests of the event who haven't been merged away, oldest first. */
     listGuests(eventId: string): Promise<Attendee[]>;
     countAttendees(eventId: string): Promise<number>;

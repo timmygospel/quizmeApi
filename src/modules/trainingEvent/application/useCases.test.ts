@@ -19,6 +19,8 @@ import {
 import {
     GetCurrentActivityUseCase,
     JoinAsGuestUseCase,
+    JoinAsSignedInUserUseCase,
+    GetEventForAttendeeUseCase,
     ListGuestsUseCase,
     RejoinAsGuestUseCase,
     SaveCheckAnswerUseCase,
@@ -60,6 +62,9 @@ function makeRepo(over: Partial<ITrainingEventRepository> = {}): ITrainingEventR
         countSubmissions: jest.fn().mockResolvedValue({}),
         createAttendee: jest.fn().mockImplementation(async (_e, name, userId) => guest("new", { displayName: name, userId })),
         findAttendee: jest.fn().mockResolvedValue(guest("g1")),
+        findOrCreateUserAttendee: jest.fn().mockImplementation(async (_e, userId, name) => ({
+            attendee: guest("emp", { userId, displayName: name }), created: true,
+        })),
         listGuests: jest.fn().mockResolvedValue([guest("g1")]),
         countAttendees: jest.fn().mockResolvedValue(1),
         addToken: jest.fn(),
@@ -224,5 +229,52 @@ describe("live nudges", () => {
         await new SubmitCheckUseCase(makeRepo(), n).execute("K7M9QX", "tok", "chk-1");
         expect(n.progress).toHaveBeenCalledTimes(2);
         expect(n.checksChanged).not.toHaveBeenCalled();
+    });
+});
+
+describe("signed-in employees", () => {
+    const TIM = { id: "u1", displayName: "Tim Morrison" };
+
+    it("join as themselves with no name to type, and get a token like a guest", async () => {
+        const repo = makeRepo();
+        const result = (await new JoinAsSignedInUserUseCase(repo).execute("k7m9qx", TIM)).getValue();
+        expect(repo.findOrCreateUserAttendee).toHaveBeenCalledWith("ev-1", "u1", "Tim Morrison");
+        expect(result.attendee).toEqual({ id: "emp", displayName: "Tim Morrison", isGuest: false });
+        expect(repo.addToken).toHaveBeenCalledWith("emp", hashAttendeeToken(result.token));
+    });
+
+    it("joining again (new device) reuses their record and doesn't nudge the trainer", async () => {
+        const n = { checksChanged: jest.fn(), progress: jest.fn() };
+        const repo = makeRepo({
+            findOrCreateUserAttendee: jest.fn().mockResolvedValue({ attendee: guest("emp", { userId: "u1" }), created: false }),
+        });
+        await new JoinAsSignedInUserUseCase(repo, n).execute("K7M9QX", TIM);
+        expect(n.progress).not.toHaveBeenCalled();
+        await new JoinAsSignedInUserUseCase(makeRepo(), n).execute("K7M9QX", TIM);
+        expect(n.progress).toHaveBeenCalledTimes(1);
+    });
+
+    it("can't join an ended event", async () => {
+        const repo = makeRepo({ findByJoinCode: jest.fn().mockResolvedValue({ ...EVENT, status: "ENDED" }) });
+        expect((await new JoinAsSignedInUserUseCase(repo).execute("K7M9QX", TIM)).errorValue()).toMatch(/^CONFLICT/);
+    });
+
+    it("the event page says who is signed in", async () => {
+        const result = (await new GetEventForAttendeeUseCase(makeRepo()).execute("K7M9QX", undefined, TIM)).getValue();
+        expect(result.signedInAs).toBe("Tim Morrison");
+        expect(result.attendee).toBeNull();
+    });
+
+    it("on a shared device, another employee's token isn't honoured for whoever is signed in now", async () => {
+        const repo = makeRepo({ findAttendeeByTokenHash: jest.fn().mockResolvedValue(guest("emp", { userId: "someone-else" })) });
+        const asTim = await new GetCurrentActivityUseCase(repo).execute("K7M9QX", "tok", TIM);
+        expect(asTim.errorValue()).toMatch(/^UNAUTHORIZED/);
+        const signedOut = await new GetCurrentActivityUseCase(repo).execute("K7M9QX", "tok", null);
+        expect(signedOut.isSuccess).toBe(true);
+    });
+
+    it("a guest token keeps working after the person signs in", async () => {
+        const result = await new GetCurrentActivityUseCase(makeRepo()).execute("K7M9QX", "tok", TIM);
+        expect(result.getValue().attendee.isGuest).toBe(true);
     });
 });
