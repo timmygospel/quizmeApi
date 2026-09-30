@@ -69,7 +69,7 @@ src/modules/quiz/
 
 **Routes files** instantiate the dependency chain directly (no DI container): `new PgQuizRepository()` → `new CreateQuizUseCase(repo)` → `new CreateQuizController(useCase)`.
 
-Multi-table aggregates (quiz questions/options/sections; question-bank options) are persisted with a "replace on save" strategy inside a transaction: the parent row is upserted, then child rows are deleted and reinserted, preserving any ids the client round-tripped from a prior load (or minted) so cross-references (e.g. a question's `section_id`) survive an edit. See `PgQuizRepository.save()` for the reference implementation.
+Multi-table aggregates are saved inside a transaction, preserving any ids the client round-tripped from a prior load (or minted) so cross-references (e.g. a question's `section_id`) survive an edit. Quiz questions and sections are **updated in place** (`PgQuizRepository.save()`): existing rows are upserted by id, new ones inserted, and only rows left out of the save are deleted — because other tables reference them (`live_event_questions`, `session_response`), so a delete-and-reinsert would break those links or fail the FK. Rows are first moved to negative `display_order` (and questions unplaced) so renumbering doesn't trip the UNIQUE ordering constraints. Leaf rows nothing references (quiz question options; question-bank options) are still simply deleted and reinserted. Removing an answered question keeps the answer: `session_response.quiz_question_id` is `ON DELETE SET NULL`.
 
 ## Modules
 

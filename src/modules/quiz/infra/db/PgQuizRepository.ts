@@ -30,14 +30,17 @@ export class PgQuizRepository implements IQuizRepository {
         }
     }
 
-    // Preserves explicit ids for questions/options/sections (round-tripped
-    // from a prior load, or client-minted) — new items get a fresh id minted
-    // here. Sections are written before questions because each question row
-    // carries its (quiz_id, section_id) composite FK; any section left out of
-    // the save is deleted and its questions come back Unassigned.
+    // Updates the quiz in place rather than delete-and-reinsert: existing questions and sections
+    // keep their rows (so nothing referencing them — live_event_questions, session_response —
+    // is disturbed), new ones are inserted, and only ones left out of the save are deleted.
+    // Explicit ids (round-tripped from a prior load, or client-minted) are preserved; items
+    // without one get a fresh id here. A deleted section's questions come back Unassigned; a
+    // deleted question's recorded answers are kept, unlinked (session_response → ON DELETE SET NULL).
     async save(quiz: Quiz): Promise<Quiz> {
         const client = await pgPool.connect();
         const quizId = quiz.id ?? randomUUID();
+        const sectionIds = quiz.sections.map((s) => s.id ?? randomUUID());
+        const questionIds = quiz.questions.map((q) => q.id ?? randomUUID());
 
         try {
             await client.query("BEGIN");
@@ -49,34 +52,69 @@ export class PgQuizRepository implements IQuizRepository {
                 [quizId, quiz.title.value]
             );
 
-            await client.query("DELETE FROM quiz_questions WHERE quiz_id = $1", [quizId]);
-            await client.query("DELETE FROM quiz_sections WHERE quiz_id = $1", [quizId]);
+            // Move every existing row out of the way of the UNIQUE (quiz_id, display_order) and
+            // (section_id, section_position) constraints, so rows can be renumbered one at a time
+            // below without colliding. Clearing section_id also frees sections for deletion.
+            await client.query(
+                `UPDATE quiz_questions
+                 SET display_order = -1 - display_order, section_id = NULL, section_position = NULL
+                 WHERE quiz_id = $1`,
+                [quizId]
+            );
+            await client.query(
+                "UPDATE quiz_sections SET display_order = -1 - display_order WHERE quiz_id = $1",
+                [quizId]
+            );
+
+            await client.query(
+                "DELETE FROM quiz_questions WHERE quiz_id = $1 AND NOT (id = ANY($2::uuid[]))",
+                [quizId, questionIds]
+            );
+            await client.query(
+                "DELETE FROM quiz_sections WHERE quiz_id = $1 AND NOT (id = ANY($2::uuid[]))",
+                [quizId, sectionIds]
+            );
 
             // questionId -> its section and position within that section
             const placement = new Map<string, { sectionId: string; position: number }>();
             for (let i = 0; i < quiz.sections.length; i++) {
                 const s = quiz.sections[i];
-                const sectionId = s.id ?? randomUUID();
+                const sectionId = sectionIds[i];
 
-                await client.query(
+                // The WHERE never lets an upsert take over another quiz's section (the use case
+                // already rejects those ids; this is the database-level backstop).
+                const sectionRes = await client.query(
                     `INSERT INTO quiz_sections (id, quiz_id, name, display_order)
-                     VALUES ($1, $2, $3, $4)`,
+                     VALUES ($1, $2, $3, $4)
+                     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, display_order = EXCLUDED.display_order
+                     WHERE quiz_sections.quiz_id = EXCLUDED.quiz_id`,
                     [sectionId, quizId, s.name, i]
                 );
+                if (sectionRes.rowCount === 0) throw new Error(`Section ${sectionId} belongs to another quiz`);
 
                 s.questionIds.forEach((questionId, position) => placement.set(questionId, { sectionId, position }));
             }
 
+            // Options aren't referenced from anywhere else, so they're simply replaced.
+            await client.query("DELETE FROM quiz_question_options WHERE question_id = ANY($1::uuid[])", [questionIds]);
+
             for (let i = 0; i < quiz.questions.length; i++) {
                 const q = quiz.questions[i];
-                const questionId = q.id ?? randomUUID();
+                const questionId = questionIds[i];
                 const place = q.id ? placement.get(q.id) : undefined;
 
-                await client.query(
+                const questionRes = await client.query(
                     `INSERT INTO quiz_questions (id, quiz_id, question_text, display_order, section_id, section_position)
-                     VALUES ($1, $2, $3, $4, $5, $6)`,
+                     VALUES ($1, $2, $3, $4, $5, $6)
+                     ON CONFLICT (id) DO UPDATE SET
+                         question_text = EXCLUDED.question_text,
+                         display_order = EXCLUDED.display_order,
+                         section_id = EXCLUDED.section_id,
+                         section_position = EXCLUDED.section_position
+                     WHERE quiz_questions.quiz_id = EXCLUDED.quiz_id`,
                     [questionId, quizId, q.question.value, i, place?.sectionId ?? null, place?.position ?? null]
                 );
+                if (questionRes.rowCount === 0) throw new Error(`Question ${questionId} belongs to another quiz`);
 
                 for (let j = 0; j < q.options.length; j++) {
                     const o = q.options[j];

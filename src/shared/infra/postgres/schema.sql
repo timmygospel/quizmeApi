@@ -275,10 +275,30 @@ CREATE TABLE IF NOT EXISTS session_attempt (
 CREATE TABLE IF NOT EXISTS session_response (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_attempt_id UUID NOT NULL REFERENCES session_attempt(id) ON DELETE CASCADE,
-    quiz_question_id UUID NOT NULL REFERENCES quiz_questions(id),
+    -- NULL once the source question is removed from its quiz: the answer (and the attempt's
+    -- score) is kept, it just can no longer be attributed to a question/section.
+    quiz_question_id UUID REFERENCES quiz_questions(id) ON DELETE SET NULL,
     is_correct BOOLEAN NOT NULL,
     answered_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Existing databases: this FK used to have no ON DELETE action, which made any save of a quiz
+-- with recorded answers fail. Relax it to SET NULL (no-op once already done).
+ALTER TABLE session_response ALTER COLUMN quiz_question_id DROP NOT NULL;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'session_response_quiz_question_id_fkey' AND confdeltype <> 'n'
+    ) THEN
+        ALTER TABLE session_response DROP CONSTRAINT session_response_quiz_question_id_fkey;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'session_response_quiz_question_id_fkey') THEN
+        ALTER TABLE session_response
+            ADD CONSTRAINT session_response_quiz_question_id_fkey
+            FOREIGN KEY (quiz_question_id) REFERENCES quiz_questions(id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- Users & Roles — Sprint 1 (read-only) per USERS_ROLES.md. Role assignments
