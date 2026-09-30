@@ -5,6 +5,7 @@ import {
     ParticipantAssignmentInput,
     ResultsSummary,
     AnalyticsGroup,
+    ActivityEntry,
     AnalyticsGroupBy,
     MyTestSessionRow,
 } from "../../domain/ITestSessionRepository";
@@ -403,13 +404,20 @@ export class PgTestSessionRepository implements ITestSessionRepository {
         };
     }
 
-    async getAnalyticsBreakdown(testSessionId: string, groupBy: AnalyticsGroupBy): Promise<AnalyticsGroup[]> {
+    async getAnalyticsBreakdown(testSessionId: string, groupBy: AnalyticsGroupBy, locationId?: string): Promise<AnalyticsGroup[]> {
         const nameCol =
             groupBy === "location" ? "p.location_name_snapshot" :
             groupBy === "department" ? "p.department_name_snapshot" :
             "p.team_name_snapshot";
+        const idCol =
+            groupBy === "location" ? "p.location_id" :
+            groupBy === "department" ? "p.department_id" :
+            "p.team_id";
+        const params: unknown[] = [testSessionId];
+        const locationFilter = locationId ? `AND p.location_id = $${params.push(locationId)}` : "";
 
         const { rows } = await pgPool.query<{
+            id: string | null;
             name: string;
             assigned: string;
             completed: string;
@@ -417,6 +425,7 @@ export class PgTestSessionRepository implements ITestSessionRepository {
             average_score: string | null;
         }>(
             `SELECT
+                ${idCol} AS id,
                 ${nameCol} AS name,
                 COUNT(p.id) AS assigned,
                 COUNT(a.id) AS completed,
@@ -424,10 +433,10 @@ export class PgTestSessionRepository implements ITestSessionRepository {
                 AVG(a.score_percentage) FILTER (WHERE a.score_percentage IS NOT NULL) AS average_score
              FROM test_session_participants p
              ${COUNTED_ATTEMPT_JOIN}
-             WHERE p.test_session_id = $1 AND ${nameCol} IS NOT NULL
-             GROUP BY ${nameCol}
+             WHERE p.test_session_id = $1 AND ${nameCol} IS NOT NULL ${locationFilter}
+             GROUP BY ${idCol}, ${nameCol}
              ORDER BY ${nameCol}`,
-            [testSessionId]
+            params
         );
 
         return rows.map((r) => {
@@ -435,6 +444,7 @@ export class PgTestSessionRepository implements ITestSessionRepository {
             const completed = Number(r.completed);
             const passed = Number(r.passed);
             return {
+                id: r.id,
                 name: r.name,
                 assigned,
                 completed,
@@ -442,6 +452,35 @@ export class PgTestSessionRepository implements ITestSessionRepository {
                 passRate: completed > 0 ? Math.round((passed / completed) * 10000) / 100 : 0,
             };
         });
+    }
+
+    async getActivity(testSessionId: string): Promise<ActivityEntry[]> {
+        const { rows } = await pgPool.query<{
+            id: string;
+            event_type: string;
+            created_at: Date;
+            actor_name: string | null;
+            attempt_number: number | null;
+        }>(
+            `SELECT e.id, e.event_type, e.created_at,
+                    NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), '') AS actor_name,
+                    ta.attempt_number
+             FROM audit_events e
+             LEFT JOIN users u ON u.id = e.actor_user_id
+             LEFT JOIN test_attempts ta ON e.entity_type = 'test_attempt' AND ta.id = e.entity_id
+             WHERE (e.entity_type = 'test_session' AND e.entity_id = $1)
+                OR (e.entity_type = 'test_attempt' AND ta.test_session_id = $1)
+             ORDER BY e.created_at DESC
+             LIMIT 200`,
+            [testSessionId]
+        );
+        return rows.map((r) => ({
+            id: r.id,
+            eventType: r.event_type,
+            occurredAt: r.created_at,
+            actorName: r.actor_name,
+            attemptNumber: r.attempt_number,
+        }));
     }
 
     async getParticipants(testSessionId: string): Promise<ParticipantRowDTO[]> {

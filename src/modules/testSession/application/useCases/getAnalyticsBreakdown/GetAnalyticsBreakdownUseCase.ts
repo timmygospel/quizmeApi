@@ -23,7 +23,12 @@ export class GetAnalyticsBreakdownUseCase {
         });
     }
 
-    async execute(testSessionId: string, groupBy: AnalyticsGroupBy, scope?: EffectiveScope): Promise<Result<AnalyticsBreakdownDTO>> {
+    async execute(
+        testSessionId: string,
+        groupBy: AnalyticsGroupBy,
+        scope?: EffectiveScope,
+        locationId?: string
+    ): Promise<Result<AnalyticsBreakdownDTO>> {
         try {
             const session = await this.repo.findById(testSessionId);
             if (!session || !isTestSessionWithinScope(session, scope)) {
@@ -33,10 +38,10 @@ export class GetAnalyticsBreakdownUseCase {
             await this.finalizeExpired([testSessionId]);
             const [overall, groups] = await Promise.all([
                 this.repo.getResults(testSessionId),
-                this.repo.getAnalyticsBreakdown(testSessionId, groupBy),
+                this.repo.getAnalyticsBreakdown(testSessionId, groupBy, locationId),
             ]);
 
-            return Result.ok({ overall, groupBy, groups });
+            return Result.ok({ overall, groupBy, locationId: locationId ?? null, groups });
         } catch (err) {
             return Result.fail(err instanceof Error ? err.message : String(err));
         }

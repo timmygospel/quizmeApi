@@ -37,6 +37,8 @@ import { SaveResponseController } from "./controllers/SaveResponseController";
 import { SubmitAttemptController } from "./controllers/SubmitAttemptController";
 import { MarkForReviewController } from "./controllers/MarkForReviewController";
 import { GetAttemptResultController } from "./controllers/GetAttemptResultController";
+import { GetActivityController } from "./controllers/GetActivityController";
+import { GetActivityUseCase } from "../../application/useCases/getActivity/GetActivityUseCase";
 
 import {
     requireAuthenticatedUser,
@@ -88,6 +90,7 @@ const submitAttemptController = new SubmitAttemptController(
     getAttemptResultUseCase
 );
 const getAttemptResultController = new GetAttemptResultController(getAttemptResultUseCase);
+const getActivityController = new GetActivityController(new GetActivityUseCase(testSessionRepo));
 const markForReviewController = new MarkForReviewController(
     new MarkForReviewUseCase(attemptRepo, testSessionRepo, assessmentRepo)
 );
@@ -137,23 +140,30 @@ router.post(
 router.get(
     "/test-sessions/:id/results",
     requireAuthenticatedUser,
-    requirePermission("session.manage"),
+    requirePermission("session.read"),
     applyEffectiveScope,
     (req, res) => getResultsController.execute(req, res)
 );
 router.get(
     "/test-sessions/:id/analytics",
     requireAuthenticatedUser,
-    requirePermission("session.manage"),
+    requirePermission("session.read"),
     applyEffectiveScope,
     (req, res) => getAnalyticsBreakdownController.execute(req, res)
 );
 router.get(
     "/test-sessions/:id/participants",
     requireAuthenticatedUser,
-    requirePermission("session.manage"),
+    requirePermission("session.read"),
     applyEffectiveScope,
     (req, res) => getParticipantsController.execute(req, res)
+);
+router.get(
+    "/test-sessions/:id/activity",
+    requireAuthenticatedUser,
+    requirePermission("session.read"),
+    applyEffectiveScope,
+    (req, res) => getActivityController.execute(req, res)
 );
 router.get("/me/test-sessions", requireAuthenticatedUser, (req, res) => getMyTestSessionsController.execute(req, res));
 router.post("/test-sessions/:sessionId/attempts", requireAuthenticatedUser, (req, res) =>

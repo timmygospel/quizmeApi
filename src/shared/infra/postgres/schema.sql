@@ -448,7 +448,7 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_id, permission_code)
 SELECT r.id, perm_code FROM roles r, unnest(ARRAY[
-    'session.read', 'session.host',
+    'session.read', 'session.host', 'session.create', 'session.manage',
     'participant.read',
     'analytics.team.view'
 ]) AS perm_code

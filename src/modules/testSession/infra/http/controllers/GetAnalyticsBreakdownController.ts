@@ -15,7 +15,10 @@ export class GetAnalyticsBreakdownController extends BaseController {
         const groupByRaw = String(this.req.query.groupBy ?? "location");
         const groupBy = (VALID_GROUP_BY as string[]).includes(groupByRaw) ? (groupByRaw as AnalyticsGroupBy) : "location";
 
-        const result = await this.useCase.execute(id, groupBy, this.req.effectiveScope);
+        // ?locationId=… drills into one location (e.g. its departments)
+        const locationId = typeof this.req.query.locationId === "string" && this.req.query.locationId ? this.req.query.locationId : undefined;
+
+        const result = await this.useCase.execute(id, groupBy, this.req.effectiveScope, locationId);
         if (result.isFailure) {
             mapFailure(this, result.errorValue());
             return;

@@ -97,6 +97,7 @@ export function makeTestSessionRepo(overrides: Partial<ITestSessionRepository> =
         getResults: jest.fn(),
         getAnalyticsBreakdown: jest.fn(),
         getParticipants: jest.fn(),
+        getActivity: jest.fn().mockResolvedValue([]),
         ...overrides,
     };
 }

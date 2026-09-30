@@ -48,6 +48,8 @@ export interface ResultsSummary {
 }
 
 export interface AnalyticsGroup {
+    /** location/department/team id — used to drill down (e.g. a location's departments). */
+    id: string | null;
     name: string;
     assigned: number;
     completed: number;
@@ -56,6 +58,15 @@ export interface AnalyticsGroup {
 }
 
 export type AnalyticsGroupBy = "location" | "department" | "team";
+
+export interface ActivityEntry {
+    id: string;
+    eventType: string;
+    occurredAt: Date;
+    actorName: string | null;
+    /** For attempt events. */
+    attemptNumber: number | null;
+}
 
 export interface MyTestSessionRow {
     session: TestSession;
@@ -102,6 +113,9 @@ export interface ITestSessionRepository {
     expireUnstartedParticipants(testSessionIds: string[], now: Date): Promise<void>;
 
     getResults(testSessionId: string): Promise<ResultsSummary>;
-    getAnalyticsBreakdown(testSessionId: string, groupBy: AnalyticsGroupBy): Promise<AnalyticsGroup[]>;
+    /** `locationId` limits the breakdown to one location (drill-down: that location's departments). */
+    getAnalyticsBreakdown(testSessionId: string, groupBy: AnalyticsGroupBy, locationId?: string): Promise<AnalyticsGroup[]>;
+    /** Audit trail for the session and its attempts, newest first. */
+    getActivity(testSessionId: string): Promise<ActivityEntry[]>;
     getParticipants(testSessionId: string): Promise<ParticipantRowDTO[]>;
 }
