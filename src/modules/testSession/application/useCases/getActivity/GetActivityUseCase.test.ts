@@ -33,6 +33,7 @@ describe("GetAnalyticsBreakdownUseCase — drill-down", () => {
     it("passes the location through, so a location can be broken down by department", async () => {
         const repo = makeTestSessionRepo({
             getResults: jest.fn().mockResolvedValue({}),
+            getQuestionAnalysis: jest.fn(),
             getAnalyticsBreakdown: jest.fn().mockResolvedValue([{ id: "d1", name: "Sales", assigned: 3, completed: 2, averageScore: 80, passRate: 100 }]),
         });
         const result = await new GetAnalyticsBreakdownUseCase(repo, makeAttemptRepo(), makeAssessmentRepo())

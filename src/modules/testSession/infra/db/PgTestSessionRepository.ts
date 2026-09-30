@@ -8,6 +8,8 @@ import {
     ActivityEntry,
     AnalyticsGroupBy,
     MyTestSessionRow,
+    QuestionAnalysis,
+    QuestionAnalysisRow,
 } from "../../domain/ITestSessionRepository";
 import { ParticipantRowDTO } from "../../dtos/TestSessionDTO";
 import { TestSession, TestSessionStatus } from "../../domain/TestSession";
@@ -402,6 +404,52 @@ export class PgTestSessionRepository implements ITestSessionRepository {
             completionRate: assigned > 0 ? Math.round((completed / assigned) * 10000) / 100 : 0,
             passRate: completed > 0 ? Math.round((passed / completed) * 10000) / 100 : 0,
         };
+    }
+
+    // Per question and option, over each participant's counted attempt (see getResults).
+    async getQuestionAnalysis(testSessionId: string, assessmentId: string): Promise<QuestionAnalysis> {
+        const counted = `SELECT a.id FROM test_session_participants p
+             ${COUNTED_ATTEMPT_JOIN}
+             WHERE p.test_session_id = $1 AND a.id IS NOT NULL`;
+        const [{ rows: countRows }, { rows }] = await Promise.all([
+            pgPool.query<{ completed: string }>(`SELECT COUNT(*) AS completed FROM (${counted}) c`, [testSessionId]),
+            pgPool.query<{
+                question_id: string;
+                question_text: string;
+                question_order: number;
+                option_id: string;
+                option_text: string;
+                is_correct: boolean;
+                picked: string;
+            }>(
+                `WITH counted AS (${counted})
+                 SELECT q.id AS question_id, q.question_text, q.display_order AS question_order,
+                        o.id AS option_id, o.text AS option_text, o.is_correct,
+                        COUNT(r.id) AS picked
+                 FROM assessment_questions q
+                 JOIN assessment_question_options o ON o.question_id = q.id
+                 LEFT JOIN test_attempt_responses r
+                        ON r.selected_option_id = o.id AND r.test_attempt_id IN (SELECT id FROM counted)
+                 WHERE q.assessment_id = $2
+                 GROUP BY q.id, q.question_text, q.display_order, o.id, o.text, o.is_correct, o.display_order
+                 ORDER BY q.display_order, o.display_order`,
+                [testSessionId, assessmentId]
+            ),
+        ]);
+
+        const byQuestion = new Map<string, QuestionAnalysisRow>();
+        for (const r of rows) {
+            let q = byQuestion.get(r.question_id);
+            if (!q) {
+                q = { questionId: r.question_id, number: byQuestion.size + 1, question: r.question_text, answered: 0, correct: 0, options: [] };
+                byQuestion.set(r.question_id, q);
+            }
+            const picked = Number(r.picked);
+            q.options.push({ id: r.option_id, text: r.option_text, isCorrect: r.is_correct, picked });
+            q.answered += picked;
+            if (r.is_correct) q.correct += picked;
+        }
+        return { completed: Number(countRows[0]?.completed ?? 0), questions: [...byQuestion.values()] };
     }
 
     async getAnalyticsBreakdown(testSessionId: string, groupBy: AnalyticsGroupBy, locationId?: string): Promise<AnalyticsGroup[]> {

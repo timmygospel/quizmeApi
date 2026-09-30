@@ -13,6 +13,7 @@ import { GetTestSessionUseCase } from "../../application/useCases/getTestSession
 import { CloseTestSessionUseCase } from "../../application/useCases/closeTestSession/CloseTestSessionUseCase";
 import { CancelTestSessionUseCase } from "../../application/useCases/cancelTestSession/CancelTestSessionUseCase";
 import { GetResultsUseCase } from "../../application/useCases/getResults/GetResultsUseCase";
+import { GetQuestionAnalysisUseCase } from "../../application/useCases/getQuestionAnalysis/GetQuestionAnalysisUseCase";
 import { GetAnalyticsBreakdownUseCase } from "../../application/useCases/getAnalyticsBreakdown/GetAnalyticsBreakdownUseCase";
 import { GetParticipantsUseCase } from "../../application/useCases/getParticipants/GetParticipantsUseCase";
 import { GetMyTestSessionsUseCase } from "../../application/useCases/getMyTestSessions/GetMyTestSessionsUseCase";
@@ -29,6 +30,7 @@ import { GetTestSessionController } from "./controllers/GetTestSessionController
 import { CloseTestSessionController } from "./controllers/CloseTestSessionController";
 import { CancelTestSessionController } from "./controllers/CancelTestSessionController";
 import { GetResultsController } from "./controllers/GetResultsController";
+import { GetQuestionAnalysisController } from "./controllers/GetQuestionAnalysisController";
 import { GetAnalyticsBreakdownController } from "./controllers/GetAnalyticsBreakdownController";
 import { GetParticipantsController } from "./controllers/GetParticipantsController";
 import { GetMyTestSessionsController } from "./controllers/GetMyTestSessionsController";
@@ -73,6 +75,9 @@ const getTestSessionController = new GetTestSessionController(new GetTestSession
 const closeTestSessionController = new CloseTestSessionController(new CloseTestSessionUseCase(testSessionRepo));
 const cancelTestSessionController = new CancelTestSessionController(new CancelTestSessionUseCase(testSessionRepo));
 const getResultsController = new GetResultsController(new GetResultsUseCase(testSessionRepo, attemptRepo, assessmentRepo));
+const getQuestionAnalysisController = new GetQuestionAnalysisController(
+    new GetQuestionAnalysisUseCase(testSessionRepo, attemptRepo, assessmentRepo)
+);
 const getAnalyticsBreakdownController = new GetAnalyticsBreakdownController(
     new GetAnalyticsBreakdownUseCase(testSessionRepo, attemptRepo, assessmentRepo)
 );
@@ -143,6 +148,13 @@ router.get(
     requirePermission("session.read"),
     applyEffectiveScope,
     (req, res) => getResultsController.execute(req, res)
+);
+router.get(
+    "/test-sessions/:id/question-analysis",
+    requireAuthenticatedUser,
+    requirePermission("session.read"),
+    applyEffectiveScope,
+    (req, res) => getQuestionAnalysisController.execute(req, res)
 );
 router.get(
     "/test-sessions/:id/analytics",

@@ -95,6 +95,7 @@ export function makeTestSessionRepo(overrides: Partial<ITestSessionRepository> =
         findMyTestSessions: jest.fn().mockResolvedValue([]),
         expireUnstartedParticipants: jest.fn().mockResolvedValue(undefined),
         getResults: jest.fn(),
+        getQuestionAnalysis: jest.fn(),
         getAnalyticsBreakdown: jest.fn(),
         getParticipants: jest.fn(),
         getActivity: jest.fn().mockResolvedValue([]),

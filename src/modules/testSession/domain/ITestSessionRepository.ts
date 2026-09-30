@@ -47,6 +47,26 @@ export interface ResultsSummary {
     passRate: number;
 }
 
+/**
+ * How one question went across the session: every participant's counted attempt (their best),
+ * with unanswered counting as wrong — the same rules as the score.
+ */
+export interface QuestionAnalysisRow {
+    questionId: string;
+    /** 1-based position in the assessment */
+    number: number;
+    question: string;
+    answered: number;
+    correct: number;
+    options: { id: string; text: string; isCorrect: boolean; picked: number }[];
+}
+
+export interface QuestionAnalysis {
+    /** Participants with a finished (counted) attempt — the denominator for % correct. */
+    completed: number;
+    questions: QuestionAnalysisRow[];
+}
+
 export interface AnalyticsGroup {
     /** location/department/team id — used to drill down (e.g. a location's departments). */
     id: string | null;
@@ -113,6 +133,7 @@ export interface ITestSessionRepository {
     expireUnstartedParticipants(testSessionIds: string[], now: Date): Promise<void>;
 
     getResults(testSessionId: string): Promise<ResultsSummary>;
+    getQuestionAnalysis(testSessionId: string, assessmentId: string): Promise<QuestionAnalysis>;
     /** `locationId` limits the breakdown to one location (drill-down: that location's departments). */
     getAnalyticsBreakdown(testSessionId: string, groupBy: AnalyticsGroupBy, locationId?: string): Promise<AnalyticsGroup[]>;
     /** Audit trail for the session and its attempts, newest first. */
