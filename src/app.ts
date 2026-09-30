@@ -21,6 +21,7 @@ import userRoutes from "./modules/users/infra/http/userRoutes";
 import rolesRoutes from "./modules/roles/infra/http/rolesRoutes";
 import assessmentRoutes from "./modules/assessment/infra/http/assessmentRoutes";
 import testSessionRoutes from "./modules/testSession/infra/http/testSessionRoutes";
+import trainingEventRoutes from "./modules/trainingEvent/infra/http/trainingEventRoutes";
 
 const app = express();
 
@@ -35,7 +36,8 @@ app.use(
         },
         credentials: false, // switch to true only if cookie auth is added
         methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Authorization"],
+        // X-Attendee-Token: how a Training Event attendee's browser identifies itself (no account)
+        allowedHeaders: ["Content-Type", "Authorization", "X-Attendee-Token"],
     })
 );
 
@@ -83,6 +85,7 @@ app.use("/api/v1", userRoutes);
 app.use("/api/v1", rolesRoutes);
 app.use("/api/v1", assessmentRoutes);
 app.use("/api/v1", testSessionRoutes);
+app.use("/api/v1", trainingEventRoutes);
 app.use("/api/v1", createMeRoutes(authProvider));
 
 export default app;

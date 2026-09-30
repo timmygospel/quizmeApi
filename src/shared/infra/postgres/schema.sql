@@ -682,6 +682,90 @@ CREATE TABLE IF NOT EXISTS test_attempt_responses (
 ALTER TABLE test_attempt_responses ADD COLUMN IF NOT EXISTS marked_for_review BOOLEAN NOT NULL DEFAULT false;
 
 -- ---------------------------------------------------------------------------
+-- Training Events (Knowledge Checks) — an informal, trainer-led whole-day course.
+-- One reusable join code/QR per event; each Knowledge Check is one section of
+-- the event's quiz, opened/closed by the trainer and answered self-paced.
+-- Attendees are guests (a name) or signed-in users; a browser proves who it is
+-- with a random token whose SHA-256 hash is stored here (never the token).
+-- Separate from Live Quiz (live_events) and Test Sessions.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS training_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    quiz_id UUID NOT NULL REFERENCES quizzes(id),
+    owner_id UUID NOT NULL REFERENCES users(id),
+    join_code TEXT NOT NULL UNIQUE,
+    event_date DATE,
+    status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'ENDED')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ended_at TIMESTAMPTZ
+);
+
+-- quiz_section_id is only a link back; name + question snapshot below are what
+-- the check actually delivers, so later quiz edits never change a check.
+CREATE TABLE IF NOT EXISTS training_event_checks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    training_event_id UUID NOT NULL REFERENCES training_events(id) ON DELETE CASCADE,
+    quiz_section_id UUID REFERENCES quiz_sections(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'OPEN', 'CLOSED')),
+    opened_at TIMESTAMPTZ,
+    closed_at TIMESTAMPTZ,
+    UNIQUE (training_event_id, position)
+);
+
+-- Copied from the quiz section the first time the check opens.
+CREATE TABLE IF NOT EXISTS training_event_check_questions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    check_id UUID NOT NULL REFERENCES training_event_checks(id) ON DELETE CASCADE,
+    source_question_id UUID REFERENCES quiz_questions(id) ON DELETE SET NULL,
+    position INTEGER NOT NULL,
+    question_text TEXT NOT NULL,
+    options JSONB NOT NULL, -- [{ "text": string, "correct": boolean }, ...]
+    UNIQUE (check_id, position)
+);
+
+-- user_id NULL = guest. merged_into_id: a duplicate the trainer folded into another attendee.
+CREATE TABLE IF NOT EXISTS training_event_attendees (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    training_event_id UUID NOT NULL REFERENCES training_events(id) ON DELETE CASCADE,
+    display_name TEXT NOT NULL,
+    user_id UUID REFERENCES users(id),
+    merged_into_id UUID REFERENCES training_event_attendees(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS training_event_attendee_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    attendee_id UUID NOT NULL REFERENCES training_event_attendees(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS training_event_attempts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    check_id UUID NOT NULL REFERENCES training_event_checks(id) ON DELETE CASCADE,
+    attendee_id UUID NOT NULL REFERENCES training_event_attendees(id) ON DELETE CASCADE,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    submitted_at TIMESTAMPTZ,
+    score_percentage NUMERIC(5, 2),
+    UNIQUE (check_id, attendee_id)
+);
+
+CREATE TABLE IF NOT EXISTS training_event_responses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    attempt_id UUID NOT NULL REFERENCES training_event_attempts(id) ON DELETE CASCADE,
+    check_question_id UUID NOT NULL REFERENCES training_event_check_questions(id) ON DELETE CASCADE,
+    option_index INTEGER NOT NULL,
+    is_correct BOOLEAN NOT NULL,
+    answered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (attempt_id, check_question_id)
+);
+
+-- ---------------------------------------------------------------------------
 -- Audit log (SESSION-BE-002) — minimal insert-only trail shared across
 -- modules. No read API yet (none was requested); audit.view is already
 -- seeded in the permission catalogue above for a future admin screen to
