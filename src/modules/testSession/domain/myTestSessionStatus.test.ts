@@ -24,9 +24,9 @@ describe("deriveMyTestSessionStatus", () => {
         expect(deriveMyTestSessionStatus("COMPLETED", from, until, now)).toBe("SUBMITTED");
     });
 
-    it("returns EXPIRED for a timed-out attempt", () => {
+    it("returns TIMED_OUT (answers auto-submitted), not EXPIRED, for a timed-out attempt", () => {
         const now = new Date("2026-01-01T10:00:00Z");
-        expect(deriveMyTestSessionStatus("TIMED_OUT", from, until, now)).toBe("EXPIRED");
+        expect(deriveMyTestSessionStatus("TIMED_OUT", from, until, now)).toBe("TIMED_OUT");
     });
 
     it("returns EXPIRED once the window has passed and nothing was started", () => {

@@ -671,6 +671,11 @@ CREATE TABLE IF NOT EXISTS test_attempt_responses (
     UNIQUE (test_attempt_id, assessment_question_id)
 );
 
+-- The participant's "mark for review" flag, kept server-side so it survives a resume. A question
+-- can be flagged before it's answered: that row has a NULL selected_option_id / is_correct, which
+-- scoring already treats as incorrect (unanswered).
+ALTER TABLE test_attempt_responses ADD COLUMN IF NOT EXISTS marked_for_review BOOLEAN NOT NULL DEFAULT false;
+
 -- ---------------------------------------------------------------------------
 -- Audit log (SESSION-BE-002) — minimal insert-only trail shared across
 -- modules. No read API yet (none was requested); audit.view is already

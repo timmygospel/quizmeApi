@@ -27,6 +27,9 @@ export async function finalizeExpiredAttempt(attempt: Attempt, deps: FinalizeExp
     );
 
     const updated = await deps.attemptRepo.markTimedOut(attempt.id!, scorePercentage, passed, attempt.expiresAt);
+    // Someone else finalized it first (e.g. a results read vs the participant's own save) — leave
+    // the participant's status to whoever did.
+    if (updated.status !== "TIMED_OUT") return updated;
     await deps.testSessionRepo.updateParticipantStatus(attempt.testSessionParticipantId, "TIMED_OUT", {
         completedAt: attempt.expiresAt,
     });

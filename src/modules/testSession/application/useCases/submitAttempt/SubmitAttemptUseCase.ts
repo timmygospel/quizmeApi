@@ -51,6 +51,8 @@ export class SubmitAttemptUseCase {
             );
 
             const submitted = await this.attemptRepo.markSubmitted(attemptId, scorePercentage, passed, now);
+            // Lost a race with the timeout path — report the attempt as it actually ended.
+            if (submitted.status !== "SUBMITTED") return Result.ok(submitted);
             await this.testSessionRepo.updateParticipantStatus(participant.id!, "COMPLETED", { completedAt: now });
 
             await recordAuditEvent({

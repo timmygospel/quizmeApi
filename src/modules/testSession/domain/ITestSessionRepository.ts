@@ -83,6 +83,12 @@ export interface ITestSessionRepository {
         timestamps?: { startedAt?: Date; completedAt?: Date }
     ): Promise<void>;
     findMyTestSessions(userId: string): Promise<MyTestSessionRow[]>;
+    /**
+     * Participants in these sessions who never started and can no longer start — the availability
+     * window has passed, or the session was closed/completed — become EXPIRED. Cancelled sessions
+     * are left alone.
+     */
+    expireUnstartedParticipants(testSessionIds: string[], now: Date): Promise<void>;
 
     getResults(testSessionId: string): Promise<ResultsSummary>;
     getAnalyticsBreakdown(testSessionId: string, groupBy: AnalyticsGroupBy): Promise<AnalyticsGroup[]>;

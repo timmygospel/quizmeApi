@@ -3,6 +3,12 @@ import { ITestSessionRepository } from "../../../domain/ITestSessionRepository";
 import { TestSession } from "../../../domain/TestSession";
 import { EffectiveScope } from "../../../../../shared/core/EffectiveScope";
 import { ParticipantRowDTO } from "../../../dtos/TestSessionDTO";
+import { IAttemptRepository } from "../../../domain/IAttemptRepository";
+import { IAssessmentRepository } from "../../../../assessment/domain/IAssessmentRepository";
+
+const makeAttemptRepo = (overrides: Partial<IAttemptRepository> = {}) =>
+    ({ findExpiredInProgress: jest.fn().mockResolvedValue([]), ...overrides } as unknown as IAttemptRepository);
+const assessmentRepo = {} as unknown as IAssessmentRepository;
 
 function makeTestSessionRepo(overrides: Partial<ITestSessionRepository> = {}): ITestSessionRepository {
     return {
@@ -16,6 +22,7 @@ function makeTestSessionRepo(overrides: Partial<ITestSessionRepository> = {}): I
         findParticipantById: jest.fn(),
         updateParticipantStatus: jest.fn(),
         findMyTestSessions: jest.fn(),
+        expireUnstartedParticipants: jest.fn().mockResolvedValue(undefined),
         getResults: jest.fn(),
         getAnalyticsBreakdown: jest.fn(),
         getParticipants: jest.fn(),
@@ -54,7 +61,7 @@ describe("GetParticipantsUseCase", () => {
             findById: jest.fn().mockResolvedValue(session()),
             getParticipants: jest.fn().mockResolvedValue(rows),
         });
-        const useCase = new GetParticipantsUseCase(repo);
+        const useCase = new GetParticipantsUseCase(repo, makeAttemptRepo(), assessmentRepo);
 
         const result = await useCase.execute("session-1");
 
@@ -65,7 +72,7 @@ describe("GetParticipantsUseCase", () => {
 
     it("fails NOT_FOUND when the session doesn't exist", async () => {
         const repo = makeTestSessionRepo({ findById: jest.fn().mockResolvedValue(null) });
-        const useCase = new GetParticipantsUseCase(repo);
+        const useCase = new GetParticipantsUseCase(repo, makeAttemptRepo(), assessmentRepo);
 
         const result = await useCase.execute("missing-session");
 
@@ -76,7 +83,7 @@ describe("GetParticipantsUseCase", () => {
 
     it("fails NOT_FOUND when the session falls outside the caller's scope", async () => {
         const repo = makeTestSessionRepo({ findById: jest.fn().mockResolvedValue(session({ ownerId: "someone-else" })) });
-        const useCase = new GetParticipantsUseCase(repo);
+        const useCase = new GetParticipantsUseCase(repo, makeAttemptRepo(), assessmentRepo);
         const scope: EffectiveScope = { type: "SELF", userId: "caller-1", allLocations: false, locationIds: [], departmentIds: [] };
 
         const result = await useCase.execute("session-1", scope);
@@ -84,5 +91,22 @@ describe("GetParticipantsUseCase", () => {
         expect(result.isFailure).toBe(true);
         expect(result.errorValue()).toMatch(/^NOT_FOUND:/);
         expect(repo.getParticipants).not.toHaveBeenCalled();
+    });
+
+    it("finalizes abandoned attempts and no-shows before listing participants", async () => {
+        const order: string[] = [];
+        const repo = makeTestSessionRepo({
+            findById: jest.fn().mockResolvedValue(session()),
+            expireUnstartedParticipants: jest.fn().mockImplementation(async () => { order.push("expire"); }),
+            getParticipants: jest.fn().mockImplementation(async () => { order.push("read"); return rows; }),
+        });
+        const attemptRepo = makeAttemptRepo({
+            findExpiredInProgress: jest.fn().mockImplementation(async () => { order.push("findExpired"); return []; }),
+        });
+
+        await new GetParticipantsUseCase(repo, attemptRepo, assessmentRepo).execute("session-1");
+
+        expect(attemptRepo.findExpiredInProgress).toHaveBeenCalledWith(["session-1"], expect.any(Date));
+        expect(order).toEqual(["findExpired", "expire", "read"]);
     });
 });

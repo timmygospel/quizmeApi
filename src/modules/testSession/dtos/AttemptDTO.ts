@@ -21,8 +21,19 @@ export interface AttemptDTO {
     passed: boolean | null;
 }
 
+/** What the participant has saved so far on a question — returned when resuming an attempt. */
+export interface SavedResponseDTO {
+    questionId: string;
+    selectedOptionId: string | null;
+    markedForReview: boolean;
+}
+
 export interface StartAttemptResponseDTO extends AttemptDTO {
     questions: AttemptQuestionDTO[];
+    /** Previously saved answers/flags; empty for a brand-new attempt. */
+    responses: SavedResponseDTO[];
+    /** True when this call picked up an attempt already in progress rather than starting one. */
+    resumed: boolean;
 }
 
 export interface AttemptResponseAckDTO {

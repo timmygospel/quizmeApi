@@ -18,7 +18,18 @@ export class StartAttemptController extends BaseController {
             return;
         }
 
-        const { attempt, questions } = result.getValue();
-        this.created({ ...AttemptMap.toDTO(attempt), questions });
+        const { attempt, questions, responses, resumed } = result.getValue();
+        const body = {
+            ...AttemptMap.toDTO(attempt),
+            questions,
+            responses: responses.map((r) => ({
+                questionId: r.assessmentQuestionId,
+                selectedOptionId: r.selectedOptionId,
+                markedForReview: r.markedForReview,
+            })),
+            resumed,
+        };
+        if (resumed) this.ok(body);
+        else this.created(body);
     }
 }

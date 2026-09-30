@@ -42,6 +42,9 @@ function makeAttemptRepo(overrides: Partial<IAttemptRepository> = {}): IAttemptR
         ),
         upsertResponse: jest.fn(),
         findResponses: jest.fn().mockResolvedValue([]),
+        findInProgressForParticipant: jest.fn().mockResolvedValue(null),
+        setMarkedForReview: jest.fn().mockResolvedValue(true),
+        findExpiredInProgress: jest.fn().mockResolvedValue([]),
         ...overrides,
     };
 }
@@ -88,6 +91,7 @@ function makeTestSessionRepo(overrides: Partial<ITestSessionRepository> = {}): I
         findParticipantById: jest.fn().mockResolvedValue(participant),
         updateParticipantStatus: jest.fn(),
         findMyTestSessions: jest.fn(),
+        expireUnstartedParticipants: jest.fn().mockResolvedValue(undefined),
         getResults: jest.fn(),
         getAnalyticsBreakdown: jest.fn(),
         getParticipants: jest.fn(),

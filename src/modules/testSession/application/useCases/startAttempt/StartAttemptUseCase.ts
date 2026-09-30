@@ -3,6 +3,9 @@ import { ITestSessionRepository } from "../../../domain/ITestSessionRepository";
 import { IAttemptRepository } from "../../../domain/IAttemptRepository";
 import { IAssessmentRepository } from "../../../../assessment/domain/IAssessmentRepository";
 import { Attempt } from "../../../domain/Attempt";
+import { AttemptResponse } from "../../../domain/AttemptResponse";
+import { Assessment } from "../../../../assessment/domain/Assessment";
+import { finalizeExpiredAttempt } from "../shared/finalizeExpiredAttempt";
 import { resolveTestSessionStatus } from "../../../domain/resolveTestSessionStatus";
 import { computeAttemptExpiry } from "../../../domain/attemptExpiry";
 import { AttemptQuestionDTO } from "../../../dtos/AttemptDTO";
@@ -10,9 +13,22 @@ import { AttemptQuestionDTO } from "../../../dtos/AttemptDTO";
 export interface StartAttemptResult {
     attempt: Attempt;
     questions: AttemptQuestionDTO[];
+    /** Answers/flags already saved — non-empty only when resuming. */
+    responses: AttemptResponse[];
+    /** True when an attempt already in progress was picked up rather than a new one started. */
+    resumed: boolean;
 }
 
 const TERMINAL_PARTICIPANT_STATUSES = ["COMPLETED", "TIMED_OUT", "EXPIRED"];
+
+// Questions as the participant sees them — option correctness is never sent.
+function toAttemptQuestions(assessment: Assessment): AttemptQuestionDTO[] {
+    return (assessment.questions ?? []).map((q) => ({
+        id: q.id!,
+        question: q.question.value,
+        options: q.options.map((o) => ({ id: o.id!, text: o.text.value })),
+    }));
+}
 
 export class StartAttemptUseCase {
     constructor(
@@ -32,9 +48,26 @@ export class StartAttemptUseCase {
             if (!participant) return Result.fail("FORBIDDEN: You are not assigned to this test session");
 
             const now = new Date();
+            const deps = { attemptRepo: this.attemptRepo, testSessionRepo: this.testSessionRepo, assessmentRepo: this.assessmentRepo };
+
+            // An attempt already in progress (browser closed, device changed…) is resumed rather than
+            // starting another — unless its time has run out, in which case it's finalized now.
+            const inProgress = await this.attemptRepo.findInProgressForParticipant(participant.id!);
+            if (inProgress && now >= inProgress.expiresAt) {
+                await finalizeExpiredAttempt(inProgress, deps);
+                return Result.fail("CONFLICT: Your time for this test ran out, so your answers were submitted automatically");
+            }
+
             const status = resolveTestSessionStatus(session.status, session.availableFrom, session.availableUntil, now);
             if (status !== "OPEN") {
                 return Result.fail(`CONFLICT: Test session is not currently available (${status})`);
+            }
+
+            if (inProgress) {
+                const assessment = await this.assessmentRepo.findById(session.assessmentId);
+                if (!assessment) return Result.fail("NOT_FOUND: The assessment for this test session could not be found");
+                const responses = await this.attemptRepo.findResponses(inProgress.id!);
+                return Result.ok({ attempt: inProgress, questions: toAttemptQuestions(assessment), responses, resumed: true });
             }
 
             if (TERMINAL_PARTICIPANT_STATUSES.includes(participant.status)) {
@@ -69,13 +102,7 @@ export class StartAttemptUseCase {
                 startedAt: participant.startedAt ?? startedAt,
             });
 
-            const questions: AttemptQuestionDTO[] = (assessment.questions ?? []).map((q) => ({
-                id: q.id!,
-                question: q.question.value,
-                options: q.options.map((o) => ({ id: o.id!, text: o.text.value })),
-            }));
-
-            return Result.ok({ attempt, questions });
+            return Result.ok({ attempt, questions: toAttemptQuestions(assessment), responses: [], resumed: false });
         } catch (err) {
             return Result.fail(err instanceof Error ? err.message : String(err));
         }

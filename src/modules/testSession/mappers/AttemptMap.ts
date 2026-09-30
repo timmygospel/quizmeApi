@@ -21,6 +21,7 @@ export interface AttemptResponseRow {
     assessment_question_id: string;
     selected_option_id: string | null;
     is_correct: boolean | null;
+    marked_for_review: boolean;
     answered_at: Date;
 }
 
@@ -63,6 +64,7 @@ export class AttemptMap {
                 assessmentQuestionId: row.assessment_question_id,
                 selectedOptionId: row.selected_option_id,
                 isCorrect: row.is_correct,
+                markedForReview: row.marked_for_review ?? false,
                 answeredAt: row.answered_at,
             },
             row.id

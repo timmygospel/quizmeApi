@@ -253,6 +253,20 @@ export class PgTestSessionRepository implements ITestSessionRepository {
         );
     }
 
+    async expireUnstartedParticipants(testSessionIds: string[], now: Date): Promise<void> {
+        if (testSessionIds.length === 0) return;
+        await pgPool.query(
+            `UPDATE test_session_participants p
+             SET status = 'EXPIRED'
+             FROM test_sessions s
+             WHERE s.id = p.test_session_id
+               AND s.id = ANY($1::uuid[])
+               AND p.status IN ('ASSIGNED', 'NOT_STARTED')
+               AND (s.available_until <= $2 OR s.status IN ('CLOSED', 'COMPLETED'))`,
+            [testSessionIds, now]
+        );
+    }
+
     async findMyTestSessions(userId: string): Promise<MyTestSessionRow[]> {
         const { rows } = await pgPool.query<
             TestSessionRow & {
@@ -310,6 +324,11 @@ export class PgTestSessionRepository implements ITestSessionRepository {
         }));
     }
 
+    // Reporting definitions, shared with getAnalyticsBreakdown so no two screens disagree:
+    //   completed = has a scored result — submitted, or auto-submitted when the timer ran out
+    //               (timedOut is the subset of completed that ran out of time)
+    //   passed / failed = completed and did / didn't reach the pass mark
+    //   completionRate = completed / assigned;  passRate = passed / completed
     async getResults(testSessionId: string): Promise<ResultsSummary> {
         const { rows } = await pgPool.query<{
             assigned: string;
@@ -323,9 +342,9 @@ export class PgTestSessionRepository implements ITestSessionRepository {
             `SELECT
                 COUNT(p.id) AS assigned,
                 COUNT(*) FILTER (WHERE p.started_at IS NOT NULL) AS started,
-                COUNT(*) FILTER (WHERE p.status = 'COMPLETED') AS completed,
+                COUNT(*) FILTER (WHERE p.status IN ('COMPLETED', 'TIMED_OUT')) AS completed,
                 COUNT(*) FILTER (WHERE a.passed = true) AS passed,
-                COUNT(*) FILTER (WHERE p.status = 'COMPLETED' AND a.passed = false) AS failed,
+                COUNT(*) FILTER (WHERE a.passed = false) AS failed,
                 COUNT(*) FILTER (WHERE p.status = 'TIMED_OUT') AS timed_out,
                 AVG(a.score_percentage) FILTER (WHERE a.score_percentage IS NOT NULL) AS average_score
              FROM test_session_participants p
@@ -372,7 +391,7 @@ export class PgTestSessionRepository implements ITestSessionRepository {
             `SELECT
                 ${nameCol} AS name,
                 COUNT(p.id) AS assigned,
-                COUNT(*) FILTER (WHERE p.status = 'COMPLETED') AS completed,
+                COUNT(*) FILTER (WHERE p.status IN ('COMPLETED', 'TIMED_OUT')) AS completed,
                 COUNT(*) FILTER (WHERE a.passed = true) AS passed,
                 AVG(a.score_percentage) FILTER (WHERE a.score_percentage IS NOT NULL) AS average_score
              FROM test_session_participants p

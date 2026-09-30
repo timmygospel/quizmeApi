@@ -44,12 +44,17 @@ export class PgAttemptRepository implements IAttemptRepository {
         passed: boolean,
         submittedAt: Date
     ): Promise<Attempt> {
+        // Only an IN_PROGRESS attempt is finalized: expired attempts are also finalized when results are
+        // read, so a participant's own submit/save can race with that. Whoever loses gets the row as it is.
         const { rows } = await pgPool.query<AttemptRow>(
             `UPDATE test_attempts SET status = $2, score_percentage = $3, passed = $4, submitted_at = $5
-             WHERE id = $1 RETURNING *`,
+             WHERE id = $1 AND status = 'IN_PROGRESS' RETURNING *`,
             [id, status, scorePercentage, passed, submittedAt]
         );
-        return AttemptMap.toDomain(rows[0]);
+        if (rows[0]) return AttemptMap.toDomain(rows[0]);
+        const current = await this.findById(id);
+        if (!current) throw new Error(`Attempt ${id} not found`);
+        return current;
     }
 
     async markSubmitted(id: string, scorePercentage: number, passed: boolean, submittedAt: Date): Promise<Attempt> {
@@ -89,5 +94,42 @@ export class PgAttemptRepository implements IAttemptRepository {
             [attemptId]
         );
         return rows.map((r) => AttemptMap.responseToDomain(r));
+    }
+
+    async findInProgressForParticipant(participantId: string): Promise<Attempt | null> {
+        const { rows } = await pgPool.query<AttemptRow>(
+            `SELECT * FROM test_attempts
+             WHERE test_session_participant_id = $1 AND status = 'IN_PROGRESS'
+             ORDER BY attempt_number DESC LIMIT 1`,
+            [participantId]
+        );
+        return rows[0] ? AttemptMap.toDomain(rows[0]) : null;
+    }
+
+    async setMarkedForReview(attemptId: string, assessmentQuestionId: string, marked: boolean): Promise<boolean> {
+        // The question must belong to the assessment this attempt's session delivers.
+        const { rows } = await pgPool.query(
+            `INSERT INTO test_attempt_responses (id, test_attempt_id, assessment_question_id, marked_for_review)
+             SELECT $1, ta.id, aq.id, $4
+             FROM test_attempts ta
+             JOIN test_sessions ts ON ts.id = ta.test_session_id
+             JOIN assessment_questions aq ON aq.assessment_id = ts.assessment_id AND aq.id = $3
+             WHERE ta.id = $2
+             ON CONFLICT (test_attempt_id, assessment_question_id)
+             DO UPDATE SET marked_for_review = EXCLUDED.marked_for_review
+             RETURNING id`,
+            [randomUUID(), attemptId, assessmentQuestionId, marked]
+        );
+        return rows.length > 0;
+    }
+
+    async findExpiredInProgress(testSessionIds: string[], now: Date): Promise<Attempt[]> {
+        if (testSessionIds.length === 0) return [];
+        const { rows } = await pgPool.query<AttemptRow>(
+            `SELECT * FROM test_attempts
+             WHERE test_session_id = ANY($1::uuid[]) AND status = 'IN_PROGRESS' AND expires_at <= $2`,
+            [testSessionIds, now]
+        );
+        return rows.map((r) => AttemptMap.toDomain(r));
     }
 }

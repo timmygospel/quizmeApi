@@ -19,6 +19,7 @@ import { GetMyTestSessionsUseCase } from "../../application/useCases/getMyTestSe
 import { StartAttemptUseCase } from "../../application/useCases/startAttempt/StartAttemptUseCase";
 import { SaveResponseUseCase } from "../../application/useCases/saveResponse/SaveResponseUseCase";
 import { SubmitAttemptUseCase } from "../../application/useCases/submitAttempt/SubmitAttemptUseCase";
+import { MarkForReviewUseCase } from "../../application/useCases/markForReview/MarkForReviewUseCase";
 
 import { PreviewAudienceController } from "./controllers/PreviewAudienceController";
 import { CreateTestSessionController } from "./controllers/CreateTestSessionController";
@@ -33,6 +34,7 @@ import { GetMyTestSessionsController } from "./controllers/GetMyTestSessionsCont
 import { StartAttemptController } from "./controllers/StartAttemptController";
 import { SaveResponseController } from "./controllers/SaveResponseController";
 import { SubmitAttemptController } from "./controllers/SubmitAttemptController";
+import { MarkForReviewController } from "./controllers/MarkForReviewController";
 
 import {
     requireAuthenticatedUser,
@@ -66,12 +68,12 @@ const getAllTestSessionsController = new GetAllTestSessionsController(new GetAll
 const getTestSessionController = new GetTestSessionController(new GetTestSessionUseCase(testSessionRepo));
 const closeTestSessionController = new CloseTestSessionController(new CloseTestSessionUseCase(testSessionRepo));
 const cancelTestSessionController = new CancelTestSessionController(new CancelTestSessionUseCase(testSessionRepo));
-const getResultsController = new GetResultsController(new GetResultsUseCase(testSessionRepo));
+const getResultsController = new GetResultsController(new GetResultsUseCase(testSessionRepo, attemptRepo, assessmentRepo));
 const getAnalyticsBreakdownController = new GetAnalyticsBreakdownController(
-    new GetAnalyticsBreakdownUseCase(testSessionRepo)
+    new GetAnalyticsBreakdownUseCase(testSessionRepo, attemptRepo, assessmentRepo)
 );
-const getParticipantsController = new GetParticipantsController(new GetParticipantsUseCase(testSessionRepo));
-const getMyTestSessionsController = new GetMyTestSessionsController(new GetMyTestSessionsUseCase(testSessionRepo));
+const getParticipantsController = new GetParticipantsController(new GetParticipantsUseCase(testSessionRepo, attemptRepo, assessmentRepo));
+const getMyTestSessionsController = new GetMyTestSessionsController(new GetMyTestSessionsUseCase(testSessionRepo, attemptRepo, assessmentRepo));
 const startAttemptController = new StartAttemptController(
     new StartAttemptUseCase(testSessionRepo, attemptRepo, assessmentRepo)
 );
@@ -80,6 +82,9 @@ const saveResponseController = new SaveResponseController(
 );
 const submitAttemptController = new SubmitAttemptController(
     new SubmitAttemptUseCase(attemptRepo, testSessionRepo, assessmentRepo)
+);
+const markForReviewController = new MarkForReviewController(
+    new MarkForReviewUseCase(attemptRepo, testSessionRepo, assessmentRepo)
 );
 
 router.post(
@@ -151,6 +156,9 @@ router.post("/test-sessions/:sessionId/attempts", requireAuthenticatedUser, (req
 );
 router.put("/attempts/:attemptId/questions/:questionId/response", requireAuthenticatedUser, (req, res) =>
     saveResponseController.execute(req, res)
+);
+router.put("/attempts/:attemptId/questions/:questionId/review", requireAuthenticatedUser, (req, res) =>
+    markForReviewController.execute(req, res)
 );
 router.post("/attempts/:attemptId/submit", requireAuthenticatedUser, (req, res) =>
     submitAttemptController.execute(req, res)
