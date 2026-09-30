@@ -60,6 +60,8 @@ export type AnalyticsGroupBy = "location" | "department" | "team";
 export interface MyTestSessionRow {
     session: TestSession;
     participant: TestSessionParticipant;
+    /** Attempts started so far, finished or not. */
+    attemptsUsed: number;
 }
 
 export interface ITestSessionRepository {

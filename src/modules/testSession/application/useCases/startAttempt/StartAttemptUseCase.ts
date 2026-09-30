@@ -19,8 +19,6 @@ export interface StartAttemptResult {
     resumed: boolean;
 }
 
-const TERMINAL_PARTICIPANT_STATUSES = ["COMPLETED", "TIMED_OUT", "EXPIRED"];
-
 // Questions as the participant sees them — option correctness is never sent.
 function toAttemptQuestions(assessment: Assessment): AttemptQuestionDTO[] {
     return (assessment.questions ?? []).map((q) => ({
@@ -70,13 +68,19 @@ export class StartAttemptUseCase {
                 return Result.ok({ attempt: inProgress, questions: toAttemptQuestions(assessment), responses, resumed: true });
             }
 
-            if (TERMINAL_PARTICIPANT_STATUSES.includes(participant.status)) {
-                return Result.fail(`CONFLICT: You have already ${participant.status.toLowerCase().replace("_", " ")} this test session`);
+            if (participant.status === "EXPIRED") {
+                return Result.fail("CONFLICT: You missed this test session");
             }
 
+            // A participant who has finished an attempt (submitted, or timed out) may take another
+            // while the session allows more — the attempt limit is the only thing that stops them.
             const attemptCount = await this.attemptRepo.countForParticipant(participant.id!);
             if (attemptCount >= session.maxAttempts) {
-                return Result.fail("CONFLICT: Attempt limit reached for this test session");
+                return Result.fail(
+                    session.maxAttempts === 1
+                        ? "CONFLICT: You have already taken this test session"
+                        : `CONFLICT: You have used all ${session.maxAttempts} attempts for this test session`
+                );
             }
 
             const assessment = await this.assessmentRepo.findById(session.assessmentId);

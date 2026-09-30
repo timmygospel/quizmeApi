@@ -58,6 +58,14 @@ function participantRowToDomain(row: ParticipantRow): TestSessionParticipant {
     return TestSessionParticipantMap.toDomain(row);
 }
 
+// The attempt that counts for a participant's result, joined as `a`: with retakes allowed, their
+// best finished attempt (highest score; latest wins a tie). NULL columns = nothing finished yet.
+const COUNTED_ATTEMPT_JOIN = `LEFT JOIN LATERAL (
+                 SELECT * FROM test_attempts ta
+                 WHERE ta.test_session_participant_id = p.id AND ta.status IN ('SUBMITTED', 'TIMED_OUT')
+                 ORDER BY ta.score_percentage DESC NULLS LAST, ta.attempt_number DESC LIMIT 1
+             ) a ON true`;
+
 export class PgTestSessionRepository implements ITestSessionRepository {
     async findById(id: string): Promise<TestSession | null> {
         const { rows } = await pgPool.query<TestSessionRow>(`${SESSION_SELECT} WHERE ts.id = $1`, [id]);
@@ -282,6 +290,7 @@ export class PgTestSessionRepository implements ITestSessionRepository {
                 participant_assigned_at: Date;
                 participant_started_at: Date | null;
                 participant_completed_at: Date | null;
+                attempts_used: number;
             }
         >(
             `SELECT ts.*,
@@ -296,7 +305,8 @@ export class PgTestSessionRepository implements ITestSessionRepository {
                     p.team_name_snapshot,
                     p.assigned_at AS participant_assigned_at,
                     p.started_at AS participant_started_at,
-                    p.completed_at AS participant_completed_at
+                    p.completed_at AS participant_completed_at,
+                    (SELECT COUNT(*) FROM test_attempts ta WHERE ta.test_session_participant_id = p.id)::int AS attempts_used
              FROM test_session_participants p
              JOIN test_sessions ts ON ts.id = p.test_session_id
              WHERE p.user_id = $1
@@ -305,6 +315,7 @@ export class PgTestSessionRepository implements ITestSessionRepository {
         );
 
         return rows.map((r) => ({
+            attemptsUsed: Number(r.attempts_used),
             session: TestSessionMap.toDomain(r, []),
             participant: participantRowToDomain({
                 id: r.participant_id,
@@ -325,9 +336,10 @@ export class PgTestSessionRepository implements ITestSessionRepository {
     }
 
     // Reporting definitions, shared with getAnalyticsBreakdown so no two screens disagree:
-    //   completed = has a scored result — submitted, or auto-submitted when the timer ran out
-    //               (timedOut is the subset of completed that ran out of time)
-    //   passed / failed = completed and did / didn't reach the pass mark
+    //   Each participant is judged on the attempt that counts (COUNTED_ATTEMPT_JOIN: their best).
+    //   completed = has a scored result — submitted, or auto-submitted when the timer ran out —
+    //               even while retaking (timedOut = the counted attempt ran out of time)
+    //   passed / failed = completed and the counted attempt did / didn't reach the pass mark
     //   completionRate = completed / assigned;  passRate = passed / completed
     async getResults(testSessionId: string): Promise<ResultsSummary> {
         const { rows } = await pgPool.query<{
@@ -342,17 +354,13 @@ export class PgTestSessionRepository implements ITestSessionRepository {
             `SELECT
                 COUNT(p.id) AS assigned,
                 COUNT(*) FILTER (WHERE p.started_at IS NOT NULL) AS started,
-                COUNT(*) FILTER (WHERE p.status IN ('COMPLETED', 'TIMED_OUT')) AS completed,
+                COUNT(a.id) AS completed,
                 COUNT(*) FILTER (WHERE a.passed = true) AS passed,
                 COUNT(*) FILTER (WHERE a.passed = false) AS failed,
-                COUNT(*) FILTER (WHERE p.status = 'TIMED_OUT') AS timed_out,
+                COUNT(*) FILTER (WHERE a.status = 'TIMED_OUT') AS timed_out,
                 AVG(a.score_percentage) FILTER (WHERE a.score_percentage IS NOT NULL) AS average_score
              FROM test_session_participants p
-             LEFT JOIN LATERAL (
-                 SELECT * FROM test_attempts ta
-                 WHERE ta.test_session_participant_id = p.id AND ta.status IN ('SUBMITTED', 'TIMED_OUT')
-                 ORDER BY ta.attempt_number DESC LIMIT 1
-             ) a ON true
+             ${COUNTED_ATTEMPT_JOIN}
              WHERE p.test_session_id = $1`,
             [testSessionId]
         );
@@ -391,15 +399,11 @@ export class PgTestSessionRepository implements ITestSessionRepository {
             `SELECT
                 ${nameCol} AS name,
                 COUNT(p.id) AS assigned,
-                COUNT(*) FILTER (WHERE p.status IN ('COMPLETED', 'TIMED_OUT')) AS completed,
+                COUNT(a.id) AS completed,
                 COUNT(*) FILTER (WHERE a.passed = true) AS passed,
                 AVG(a.score_percentage) FILTER (WHERE a.score_percentage IS NOT NULL) AS average_score
              FROM test_session_participants p
-             LEFT JOIN LATERAL (
-                 SELECT * FROM test_attempts ta
-                 WHERE ta.test_session_participant_id = p.id AND ta.status IN ('SUBMITTED', 'TIMED_OUT')
-                 ORDER BY ta.attempt_number DESC LIMIT 1
-             ) a ON true
+             ${COUNTED_ATTEMPT_JOIN}
              WHERE p.test_session_id = $1 AND ${nameCol} IS NOT NULL
              GROUP BY ${nameCol}
              ORDER BY ${nameCol}`,
@@ -444,11 +448,7 @@ export class PgTestSessionRepository implements ITestSessionRepository {
                 a.score_percentage, a.passed
              FROM test_session_participants p
              JOIN users u ON u.id = p.user_id
-             LEFT JOIN LATERAL (
-                 SELECT * FROM test_attempts ta
-                 WHERE ta.test_session_participant_id = p.id AND ta.status IN ('SUBMITTED', 'TIMED_OUT')
-                 ORDER BY ta.attempt_number DESC LIMIT 1
-             ) a ON true
+             ${COUNTED_ATTEMPT_JOIN}
              WHERE p.test_session_id = $1
              ORDER BY u.last_name, u.first_name`,
             [testSessionId]

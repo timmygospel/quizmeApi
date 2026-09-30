@@ -76,4 +76,56 @@ describe("StartAttemptUseCase", () => {
         const result = await new StartAttemptUseCase(sessionRepo, makeAttemptRepo(), makeAssessmentRepo()).execute("session-1", "stranger");
         expect(result.errorValue()).toMatch(/^FORBIDDEN:/);
     });
+
+    describe("retakes", () => {
+        it("lets a participant who has submitted start another attempt while attempts remain", async () => {
+            const attemptRepo = makeAttemptRepo({ countForParticipant: jest.fn().mockResolvedValue(1) });
+            const sessionRepo = makeTestSessionRepo({
+                findById: jest.fn().mockResolvedValue(makeSession({ maxAttempts: 3 })),
+                findParticipantForUser: jest.fn().mockResolvedValue(makeParticipant("COMPLETED")),
+            });
+            const result = await new StartAttemptUseCase(sessionRepo, attemptRepo, makeAssessmentRepo()).execute("session-1", "user-1");
+
+            expect(result.isSuccess).toBe(true);
+            expect(result.getValue().attempt.attemptNumber).toBe(2);
+            expect(sessionRepo.updateParticipantStatus).toHaveBeenCalledWith("participant-1", "IN_PROGRESS", expect.anything());
+        });
+
+        it("also after a timed-out attempt", async () => {
+            const attemptRepo = makeAttemptRepo({ countForParticipant: jest.fn().mockResolvedValue(1) });
+            const sessionRepo = makeTestSessionRepo({
+                findById: jest.fn().mockResolvedValue(makeSession({ maxAttempts: 2 })),
+                findParticipantForUser: jest.fn().mockResolvedValue(makeParticipant("TIMED_OUT")),
+            });
+            const result = await new StartAttemptUseCase(sessionRepo, attemptRepo, makeAssessmentRepo()).execute("session-1", "user-1");
+            expect(result.isSuccess).toBe(true);
+        });
+
+        it("stops at the attempt limit, saying how many were allowed", async () => {
+            const attemptRepo = makeAttemptRepo({ countForParticipant: jest.fn().mockResolvedValue(3) });
+            const sessionRepo = makeTestSessionRepo({
+                findById: jest.fn().mockResolvedValue(makeSession({ maxAttempts: 3 })),
+                findParticipantForUser: jest.fn().mockResolvedValue(makeParticipant("COMPLETED")),
+            });
+            const result = await new StartAttemptUseCase(sessionRepo, attemptRepo, makeAssessmentRepo()).execute("session-1", "user-1");
+            expect(result.errorValue()).toBe("CONFLICT: You have used all 3 attempts for this test session");
+            expect(attemptRepo.create).not.toHaveBeenCalled();
+        });
+
+        it("with a single attempt, a submitted test can't be taken again", async () => {
+            const attemptRepo = makeAttemptRepo({ countForParticipant: jest.fn().mockResolvedValue(1) });
+            const sessionRepo = makeTestSessionRepo({ findParticipantForUser: jest.fn().mockResolvedValue(makeParticipant("COMPLETED")) });
+            const result = await new StartAttemptUseCase(sessionRepo, attemptRepo, makeAssessmentRepo()).execute("session-1", "user-1");
+            expect(result.errorValue()).toBe("CONFLICT: You have already taken this test session");
+        });
+
+        it("a missed (expired) participant can't start", async () => {
+            const sessionRepo = makeTestSessionRepo({
+                findById: jest.fn().mockResolvedValue(makeSession({ maxAttempts: 3 })),
+                findParticipantForUser: jest.fn().mockResolvedValue(makeParticipant("EXPIRED")),
+            });
+            const result = await new StartAttemptUseCase(sessionRepo, makeAttemptRepo(), makeAssessmentRepo()).execute("session-1", "user-1");
+            expect(result.errorValue()).toBe("CONFLICT: You missed this test session");
+        });
+    });
 });

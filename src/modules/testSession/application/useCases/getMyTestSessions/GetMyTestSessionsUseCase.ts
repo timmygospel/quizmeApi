@@ -1,6 +1,7 @@
 import { Result } from "../../../../../shared/core/Result";
 import { ITestSessionRepository } from "../../../domain/ITestSessionRepository";
 import { deriveMyTestSessionStatus } from "../../../domain/myTestSessionStatus";
+import { resolveTestSessionStatus } from "../../../domain/resolveTestSessionStatus";
 import { MyTestSessionDTO } from "../../../dtos/MyTestSessionDTO";
 import { IAttemptRepository } from "../../../domain/IAttemptRepository";
 import { IAssessmentRepository } from "../../../../assessment/domain/IAssessmentRepository";
@@ -31,15 +32,24 @@ export class GetMyTestSessionsUseCase {
             const now = new Date();
 
             // A cancelled session can't be taken — don't offer it.
-            const items: MyTestSessionDTO[] = rows.filter(({ session }) => session.status !== "CANCELLED").map(({ session, participant }) => ({
-                testSessionId: session.id!,
-                name: session.name,
-                assessmentId: session.assessmentId,
-                availableFrom: session.availableFrom.toISOString(),
-                availableUntil: session.availableUntil.toISOString(),
-                timeLimitMinutes: session.timeLimitMinutes,
-                status: deriveMyTestSessionStatus(participant.status, session.availableFrom, session.availableUntil, now),
-            }));
+            const items: MyTestSessionDTO[] = rows
+                .filter(({ session }) => session.status !== "CANCELLED")
+                .map(({ session, participant, attemptsUsed }) => {
+                    const status = deriveMyTestSessionStatus(participant.status, session.availableFrom, session.availableUntil, now);
+                    const open = resolveTestSessionStatus(session.status, session.availableFrom, session.availableUntil, now) === "OPEN";
+                    return {
+                        testSessionId: session.id!,
+                        name: session.name,
+                        assessmentId: session.assessmentId,
+                        availableFrom: session.availableFrom.toISOString(),
+                        availableUntil: session.availableUntil.toISOString(),
+                        timeLimitMinutes: session.timeLimitMinutes,
+                        status,
+                        maxAttempts: session.maxAttempts,
+                        attemptsUsed,
+                        canRetake: (status === "SUBMITTED" || status === "TIMED_OUT") && open && attemptsUsed < session.maxAttempts,
+                    };
+                });
 
             return Result.ok(items);
         } catch (err) {
