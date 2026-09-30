@@ -64,7 +64,7 @@ export class Quiz {
             }
             for (const questionId of section.questionIds) {
                 if (!questionIds.has(questionId)) {
-                    return Result.fail(`Question ${questionId} is not part of this quiz`);
+                    return Result.fail(`Question ${questionId} is not part of this Knowledge Module`);
                 }
                 if (assigned.has(questionId)) {
                     return Result.fail(`Question ${questionId} is assigned to more than one section`);

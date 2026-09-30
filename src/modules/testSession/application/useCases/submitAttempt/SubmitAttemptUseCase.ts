@@ -39,7 +39,7 @@ export class SubmitAttemptUseCase {
             }
 
             const session = await this.testSessionRepo.findById(attempt.testSessionId);
-            if (!session) return Result.fail("NOT_FOUND: Test session not found");
+            if (!session) return Result.fail("NOT_FOUND: Assessment Session not found");
             const assessment = await this.assessmentRepo.findById(session.assessmentId);
             if (!assessment) return Result.fail("NOT_FOUND: Assessment not found");
 

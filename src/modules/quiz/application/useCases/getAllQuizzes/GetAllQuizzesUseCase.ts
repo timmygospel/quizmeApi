@@ -17,7 +17,7 @@ export class GetAllQuizzesUseCase implements UseCase<void, Result<Quiz[]>> {
             return Result.ok<Quiz[]>(quizzes);
         } catch (error) {
             console.error("[GetAllQuizzesUseCase] Error:", error);
-            return Result.fail<Quiz[]>("Failed to retrieve quizzes");
+            return Result.fail<Quiz[]>("Failed to retrieve Knowledge Modules");
         }
     }
 }

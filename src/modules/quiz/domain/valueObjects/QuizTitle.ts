@@ -5,10 +5,10 @@ export class QuizTitle {
 
     public static create(title: string): Result<QuizTitle> {
         if (!title || title.trim().length === 0) {
-            return Result.fail<QuizTitle>("Quiz title cannot be empty");
+            return Result.fail<QuizTitle>("Knowledge Module title cannot be empty");
         }
         if (title.length > 100) {
-            return Result.fail<QuizTitle>("Quiz title cannot exceed 100 characters");
+            return Result.fail<QuizTitle>("Knowledge Module title cannot exceed 100 characters");
         }
         return Result.ok<QuizTitle>(new QuizTitle(title.trim()));
     }

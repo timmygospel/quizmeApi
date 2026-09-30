@@ -48,7 +48,7 @@ describe("CreateQuizUseCase — sections", () => {
         expect(quiz.sections[0].questionIds).toEqual([quiz.questions[0].id]);
     });
 
-    it("rejects a question id or section id that already belongs to another quiz", async () => {
+    it("rejects a question id or section id that already belongs to another Knowledge Module", async () => {
         const existing = (
             await create.execute({
                 title: "Customer Service Quiz",
@@ -66,8 +66,8 @@ describe("CreateQuizUseCase — sections", () => {
             sections: [{ id: existing.sections[0].id, name: "Complaint Handling" }],
         });
 
-        expect(takenQuestion.errorValue()).toBe(`Question ${existing.questions[0].id} belongs to another quiz`);
-        expect(takenSection.errorValue()).toBe(`Section ${existing.sections[0].id} belongs to another quiz`);
+        expect(takenQuestion.errorValue()).toBe(`Question ${existing.questions[0].id} belongs to another Knowledge Module`);
+        expect(takenSection.errorValue()).toBe(`Section ${existing.sections[0].id} belongs to another Knowledge Module`);
         expect(repo.quizzes.size).toBe(1);
     });
 

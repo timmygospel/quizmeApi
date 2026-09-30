@@ -112,10 +112,10 @@ export async function buildQuizContent(
         owners.has(id) && owners.get(id) !== input.quizId;
 
     for (const id of new Set(claimedQuestionIds)) {
-        if (belongsElsewhere(questionOwners, id)) return Result.fail(`Question ${id} belongs to another quiz`);
+        if (belongsElsewhere(questionOwners, id)) return Result.fail(`Question ${id} belongs to another Knowledge Module`);
     }
     for (const id of new Set(claimedSectionIds)) {
-        if (belongsElsewhere(sectionOwners, id)) return Result.fail(`Section ${id} belongs to another quiz`);
+        if (belongsElsewhere(sectionOwners, id)) return Result.fail(`Section ${id} belongs to another Knowledge Module`);
     }
 
     // --- Membership ---
@@ -127,7 +127,7 @@ export async function buildQuizContent(
         });
         for (const section of sections) {
             for (const id of section.questionIds) {
-                if (!questionIds.has(id)) return Result.fail(`Question ${id} is not part of this quiz`);
+                if (!questionIds.has(id)) return Result.fail(`Question ${id} is not part of this Knowledge Module`);
             }
         }
     } else {
@@ -140,7 +140,7 @@ export async function buildQuizContent(
         const moves = kept.filter(({ dto }) => dto.sectionId !== undefined);
         for (const { dto, id } of moves) {
             if (dto.sectionId !== null && !sectionIds.has(dto.sectionId!)) {
-                return Result.fail(`Section ${dto.sectionId} is not part of this quiz`);
+                return Result.fail(`Section ${dto.sectionId} is not part of this Knowledge Module`);
             }
             for (const section of sections) {
                 section.questionIds = section.questionIds.filter((qid) => qid !== id);

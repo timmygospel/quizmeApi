@@ -73,7 +73,7 @@ export class GetEventForAttendeeUseCase {
     execute(joinCode: string, token: string | undefined, viewer?: Viewer | null): Promise<Result<PublicEventDTO>> {
         return run(async () => {
             const event = await findEvent(this.repo, joinCode);
-            if (!event) return Result.fail("NOT_FOUND: No training event has that code — check it with your trainer");
+            if (!event) return Result.fail("NOT_FOUND: No Training Session has that code — check it with your trainer");
             const attendee = await attendeeFor(this.repo, event, token, viewer);
             return Result.ok({
                 name: event.name, eventDate: event.eventDate, status: event.status,
@@ -91,8 +91,8 @@ export class JoinAsGuestUseCase {
     execute(joinCode: string, rawName: unknown): Promise<Result<JoinResultDTO>> {
         return run(async () => {
             const event = await findEvent(this.repo, joinCode);
-            if (!event) return Result.fail("NOT_FOUND: No training event has that code — check it with your trainer");
-            if (event.status !== "OPEN") return Result.fail("CONFLICT: This training event has ended");
+            if (!event) return Result.fail("NOT_FOUND: No Training Session has that code — check it with your trainer");
+            if (event.status !== "OPEN") return Result.fail("CONFLICT: This Training Session has ended");
             const name = cleanDisplayName(rawName);
             if (!name) return Result.fail("Enter your name (up to 60 characters)");
             const attendee = await this.repo.createAttendee(event.id, name, null);
@@ -113,8 +113,8 @@ export class JoinAsSignedInUserUseCase {
     execute(joinCode: string, viewer: Viewer): Promise<Result<JoinResultDTO>> {
         return run(async () => {
             const event = await findEvent(this.repo, joinCode);
-            if (!event) return Result.fail("NOT_FOUND: No training event has that code — check it with your trainer");
-            if (event.status !== "OPEN") return Result.fail("CONFLICT: This training event has ended");
+            if (!event) return Result.fail("NOT_FOUND: No Training Session has that code — check it with your trainer");
+            if (event.status !== "OPEN") return Result.fail("CONFLICT: This Training Session has ended");
             const name = cleanDisplayName(viewer.displayName) ?? "Employee";
             const { attendee, created } = await this.repo.findOrCreateUserAttendee(event.id, viewer.id, name);
             const joined = await issueToken(this.repo, attendee);
@@ -131,8 +131,8 @@ export class ListGuestsUseCase {
     execute(joinCode: string): Promise<Result<AttendeeDTO[]>> {
         return run(async () => {
             const event = await findEvent(this.repo, joinCode);
-            if (!event) return Result.fail("NOT_FOUND: No training event has that code — check it with your trainer");
-            if (event.status !== "OPEN") return Result.fail("CONFLICT: This training event has ended");
+            if (!event) return Result.fail("NOT_FOUND: No Training Session has that code — check it with your trainer");
+            if (event.status !== "OPEN") return Result.fail("CONFLICT: This Training Session has ended");
             return Result.ok((await this.repo.listGuests(event.id)).map(toAttendeeDTO));
         });
     }
@@ -145,8 +145,8 @@ export class RejoinAsGuestUseCase {
     execute(joinCode: string, attendeeId: unknown): Promise<Result<JoinResultDTO>> {
         return run(async () => {
             const event = await findEvent(this.repo, joinCode);
-            if (!event) return Result.fail("NOT_FOUND: No training event has that code — check it with your trainer");
-            if (event.status !== "OPEN") return Result.fail("CONFLICT: This training event has ended");
+            if (!event) return Result.fail("NOT_FOUND: No Training Session has that code — check it with your trainer");
+            if (event.status !== "OPEN") return Result.fail("CONFLICT: This Training Session has ended");
             if (typeof attendeeId !== "string" || !attendeeId) return Result.fail("attendeeId is required");
             const attendee = await this.repo.findAttendee(attendeeId);
             if (!attendee || attendee.trainingEventId !== event.id || attendee.userId !== null || attendee.mergedIntoId) {
@@ -164,7 +164,7 @@ export class GetCurrentActivityUseCase {
     execute(joinCode: string, token: string | undefined, viewer?: Viewer | null): Promise<Result<CurrentActivityDTO>> {
         return run(async () => {
             const event = await findEvent(this.repo, joinCode);
-            if (!event) return Result.fail("NOT_FOUND: No training event has that code — check it with your trainer");
+            if (!event) return Result.fail("NOT_FOUND: No Training Session has that code — check it with your trainer");
             const attendee = await attendeeFor(this.repo, event, token, viewer);
             if (!attendee) return Result.fail("UNAUTHORIZED: Join the event first");
             await this.repo.touchAttendee(attendee.id, new Date());
@@ -212,7 +212,7 @@ async function openCheckFor(
     repo: ITrainingEventRepository, joinCode: string, token: string | undefined, checkId: string, viewer?: Viewer | null
 ): Promise<Result<{ event: TrainingEvent; attendee: Attendee; questions: CheckQuestion[] }>> {
     const event = await findEvent(repo, joinCode);
-    if (!event) return Result.fail("NOT_FOUND: No training event has that code — check it with your trainer");
+    if (!event) return Result.fail("NOT_FOUND: No Training Session has that code — check it with your trainer");
     const attendee = await attendeeFor(repo, event, token, viewer);
     if (!attendee) return Result.fail("UNAUTHORIZED: Join the event first");
     const check = await repo.findCheck(checkId);

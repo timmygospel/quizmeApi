@@ -10,7 +10,7 @@ export class DeleteQuizUseCase {
             const existing = await this.quizRepo.findById(dto.id);
 
             if (!existing) {
-                return Result.fail(`Quiz with id ${dto.id} not found`);
+                return Result.fail(`Knowledge Module with id ${dto.id} not found`);
             }
 
             await this.quizRepo.delete(dto.id);

@@ -20,7 +20,7 @@ export class GetQuizController extends BaseController {
 
             this.ok(QuizMap.toDTO(quiz));
         } catch (err) {
-            if (err instanceof Error && err.message === "Quiz not found") {
+            if (err instanceof Error && err.message === "Knowledge Module not found") {
                 this.notFound("Quiz not found");
                 return;
             }

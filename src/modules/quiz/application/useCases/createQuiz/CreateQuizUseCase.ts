@@ -37,7 +37,7 @@ export class CreateQuizUseCase implements UseCase<CreateQuizDTO, Promise<Result<
             // ✅ 5. Return success
             return Result.ok(savedQuiz);
         } catch (error: any) {
-            return Result.fail(`UNEXPECTED: Failed to create quiz: ${error?.message ?? error}`);
+            return Result.fail(`UNEXPECTED: Failed to create Knowledge Module: ${error?.message ?? error}`);
         }
     }
 }

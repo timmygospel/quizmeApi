@@ -19,7 +19,7 @@ describe("Quiz sections", () => {
     it("validates a section only holds this quiz's questions", () => {
         const result = Quiz.validateSections(questions, [{ id: "s1", name: "A", questionIds: ["elsewhere"] }]);
 
-        expect(result.errorValue()).toBe("Question elsewhere is not part of this quiz");
+        expect(result.errorValue()).toBe("Question elsewhere is not part of this Knowledge Module");
     });
 
     it("validates section names and unique ids", () => {

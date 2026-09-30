@@ -7,7 +7,7 @@ export class GetQuizUseCase {
     async execute(id: string): Promise<Quiz> {
         const quiz = await this.quizRepo.findById(id);
         if (!quiz) {
-            throw new Error("Quiz not found");
+            throw new Error("Knowledge Module not found");
         }
         return quiz;
     }

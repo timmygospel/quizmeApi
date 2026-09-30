@@ -160,7 +160,7 @@ describe("quiz routes — sections over HTTP", () => {
         });
 
         expect(res.status).toBe(400);
-        expect((await res.json()).message).toBe(`Section ${foreign} belongs to another quiz`);
+        expect((await res.json()).message).toBe(`Section ${foreign} belongs to another Knowledge Module`);
     });
 
     it("404s updating a quiz that doesn't exist", async () => {

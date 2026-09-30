@@ -27,7 +27,7 @@ export class GetParticipantsUseCase {
         try {
             const session = await this.repo.findById(testSessionId);
             if (!session || !isTestSessionWithinScope(session, scope)) {
-                return Result.fail(`NOT_FOUND: Test session with id ${testSessionId} not found`);
+                return Result.fail(`NOT_FOUND: Assessment Session with id ${testSessionId} not found`);
             }
 
             await this.finalizeExpired([testSessionId]);

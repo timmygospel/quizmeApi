@@ -42,7 +42,7 @@ export class CreateTestSessionUseCase {
             // "assessment_version_id" == a published assessments.id — see
             // UpdateAssessmentUseCase's ASSESSMENT_PUBLISHED_IMMUTABLE rule.
             if (assessment.status !== "PUBLISHED") {
-                return Result.fail("Only a published assessment can be delivered by a Test Session");
+                return Result.fail("Only a published assessment can be delivered by an Assessment Session");
             }
 
             if (!dto.availableFrom || !dto.availableUntil) {

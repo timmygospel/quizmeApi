@@ -17,7 +17,7 @@ export class DeleteQuizController extends BaseController {
                 return this.clientError(result.errorValue());
             }
 
-            return this.ok({ message: "Quiz deleted successfully" });
+            return this.ok({ message: "Knowledge Module deleted successfully" });
         } catch (err) {
             return this.fail(err);
         }

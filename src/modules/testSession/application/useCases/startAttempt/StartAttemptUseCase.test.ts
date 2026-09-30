@@ -68,7 +68,7 @@ describe("StartAttemptUseCase", () => {
         const result = await new StartAttemptUseCase(sessionRepo, attemptRepo, makeAssessmentRepo()).execute("session-1", "user-1");
 
         expect(result.isFailure).toBe(true);
-        expect(result.errorValue()).toMatch(/^CONFLICT: Test session is not currently available \(CANCELLED\)/);
+        expect(result.errorValue()).toMatch(/^CONFLICT: Assessment Session is not currently available \(CANCELLED\)/);
     });
 
     it("refuses someone who is not assigned", async () => {
@@ -108,7 +108,7 @@ describe("StartAttemptUseCase", () => {
                 findParticipantForUser: jest.fn().mockResolvedValue(makeParticipant("COMPLETED")),
             });
             const result = await new StartAttemptUseCase(sessionRepo, attemptRepo, makeAssessmentRepo()).execute("session-1", "user-1");
-            expect(result.errorValue()).toBe("CONFLICT: You have used all 3 attempts for this test session");
+            expect(result.errorValue()).toBe("CONFLICT: You have used all 3 attempts for this Assessment Session");
             expect(attemptRepo.create).not.toHaveBeenCalled();
         });
 
@@ -116,7 +116,7 @@ describe("StartAttemptUseCase", () => {
             const attemptRepo = makeAttemptRepo({ countForParticipant: jest.fn().mockResolvedValue(1) });
             const sessionRepo = makeTestSessionRepo({ findParticipantForUser: jest.fn().mockResolvedValue(makeParticipant("COMPLETED")) });
             const result = await new StartAttemptUseCase(sessionRepo, attemptRepo, makeAssessmentRepo()).execute("session-1", "user-1");
-            expect(result.errorValue()).toBe("CONFLICT: You have already taken this test session");
+            expect(result.errorValue()).toBe("CONFLICT: You have already taken this Assessment Session");
         });
 
         it("a missed (expired) participant can't start", async () => {
@@ -125,7 +125,7 @@ describe("StartAttemptUseCase", () => {
                 findParticipantForUser: jest.fn().mockResolvedValue(makeParticipant("EXPIRED")),
             });
             const result = await new StartAttemptUseCase(sessionRepo, makeAttemptRepo(), makeAssessmentRepo()).execute("session-1", "user-1");
-            expect(result.errorValue()).toBe("CONFLICT: You missed this test session");
+            expect(result.errorValue()).toBe("CONFLICT: You missed this Assessment Session");
         });
     });
 });

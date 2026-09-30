@@ -13,7 +13,7 @@ export class GetTestSessionUseCase {
             // Same failure for "doesn't exist" and "exists but outside your
             // scope" — see PERMISSIONS.md §11.
             if (!session || !isTestSessionWithinScope(session, scope)) {
-                return Result.fail(`NOT_FOUND: Test session with id ${id} not found`);
+                return Result.fail(`NOT_FOUND: Assessment Session with id ${id} not found`);
             }
             return Result.ok(session);
         } catch (err) {

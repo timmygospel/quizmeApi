@@ -27,12 +27,12 @@ export class GetSectionQuestionsUseCase implements UseCase<GetSectionQuestionsDT
     constructor(private quizRepo: IQuizRepository) { }
 
     async execute(dto: GetSectionQuestionsDTO): Promise<Result<SectionQuestions>> {
-        if (!isUuid(dto.quizId)) return Result.fail(`NOT_FOUND: Quiz with id ${dto.quizId} not found`);
+        if (!isUuid(dto.quizId)) return Result.fail(`NOT_FOUND: Knowledge Module with id ${dto.quizId} not found`);
         const quiz = await this.quizRepo.findById(dto.quizId);
-        if (!quiz) return Result.fail(`NOT_FOUND: Quiz with id ${dto.quizId} not found`);
+        if (!quiz) return Result.fail(`NOT_FOUND: Knowledge Module with id ${dto.quizId} not found`);
 
         const position = quiz.sections.findIndex((s) => s.id === dto.sectionId);
-        if (position === -1) return Result.fail(`NOT_FOUND: Section ${dto.sectionId} not found in this quiz`);
+        if (position === -1) return Result.fail(`NOT_FOUND: Section ${dto.sectionId} not found in this Knowledge Module`);
         const section = quiz.sections[position];
 
         const byId = new Map(quiz.questions.map((q) => [q.id, q]));

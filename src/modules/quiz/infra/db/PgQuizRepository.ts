@@ -90,7 +90,7 @@ export class PgQuizRepository implements IQuizRepository {
                      WHERE quiz_sections.quiz_id = EXCLUDED.quiz_id`,
                     [sectionId, quizId, s.name, i]
                 );
-                if (sectionRes.rowCount === 0) throw new Error(`Section ${sectionId} belongs to another quiz`);
+                if (sectionRes.rowCount === 0) throw new Error(`Section ${sectionId} belongs to another Knowledge Module`);
 
                 s.questionIds.forEach((questionId, position) => placement.set(questionId, { sectionId, position }));
             }
@@ -114,7 +114,7 @@ export class PgQuizRepository implements IQuizRepository {
                      WHERE quiz_questions.quiz_id = EXCLUDED.quiz_id`,
                     [questionId, quizId, q.question.value, i, place?.sectionId ?? null, place?.position ?? null]
                 );
-                if (questionRes.rowCount === 0) throw new Error(`Question ${questionId} belongs to another quiz`);
+                if (questionRes.rowCount === 0) throw new Error(`Question ${questionId} belongs to another Knowledge Module`);
 
                 for (let j = 0; j < q.options.length; j++) {
                     const o = q.options[j];
@@ -136,7 +136,7 @@ export class PgQuizRepository implements IQuizRepository {
         }
 
         const saved = await this.findById(quizId);
-        if (!saved) throw new Error("Quiz not found after save");
+        if (!saved) throw new Error("Knowledge Module not found after save");
         return saved;
     }
 

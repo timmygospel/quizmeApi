@@ -18,7 +18,7 @@ export class UpdateQuizUseCase implements UseCase<UpdateQuizDTO, Promise<Result<
             // ✅ 1. Find existing quiz
             const existingQuiz = await this.quizRepo.findById(dto.id);
             if (!existingQuiz) {
-                return Result.fail(`NOT_FOUND: Quiz with id ${dto.id} not found`);
+                return Result.fail(`NOT_FOUND: Knowledge Module with id ${dto.id} not found`);
             }
 
             // ✅ 2. Validate title (if provided)
@@ -57,7 +57,7 @@ export class UpdateQuizUseCase implements UseCase<UpdateQuizDTO, Promise<Result<
             // ✅ 6. Return success
             return Result.ok(savedQuiz);
         } catch (error: any) {
-            return Result.fail(`UNEXPECTED: Failed to update quiz: ${error?.message ?? error}`);
+            return Result.fail(`UNEXPECTED: Failed to update Knowledge Module: ${error?.message ?? error}`);
         }
     }
 }

@@ -53,7 +53,7 @@ describe("GetSectionQuestionsUseCase", () => {
 
         const result = await useCase.execute({ quizId: sales.id!, sectionId: service.sections[0].id! });
 
-        expect(result.errorValue()).toMatch(/^NOT_FOUND: Section .* not found in this quiz$/);
+        expect(result.errorValue()).toMatch(/^NOT_FOUND: Section .* not found in this Knowledge Module$/);
     });
 
     it("reports a missing quiz as not found", async () => {

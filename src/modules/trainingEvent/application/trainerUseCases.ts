@@ -34,7 +34,7 @@ async function loadManaged(
     repo: ITrainingEventRepository, eventId: string, userId: string, scope?: EffectiveScope
 ): Promise<Result<TrainingEvent>> {
     const event = await repo.findById(eventId);
-    if (!event || !canManage(event, userId, scope)) return Result.fail(`NOT_FOUND: Training event ${eventId} not found`);
+    if (!event || !canManage(event, userId, scope)) return Result.fail(`NOT_FOUND: Training Session ${eventId} not found`);
     return Result.ok(event);
 }
 
@@ -52,9 +52,9 @@ export class CreateTrainingEventUseCase {
     execute(input: CreateTrainingEventInput, ownerId: string): Promise<Result<TrainingEventDetailDTO>> {
         return run(async () => {
             const name = typeof input.name === "string" ? input.name.trim() : "";
-            if (!name) return Result.fail("Give the training event a name");
+            if (!name) return Result.fail("Give the Training Session a name");
             if (name.length > NAME_MAX) return Result.fail(`The name can be at most ${NAME_MAX} characters`);
-            if (typeof input.quizId !== "string" || !input.quizId) return Result.fail("Choose the quiz this event uses");
+            if (typeof input.quizId !== "string" || !input.quizId) return Result.fail("Choose the Knowledge Module this session uses");
             let eventDate: string | null = null;
             if (input.eventDate != null && input.eventDate !== "") {
                 if (typeof input.eventDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(input.eventDate) || isNaN(Date.parse(input.eventDate))) {
@@ -64,11 +64,11 @@ export class CreateTrainingEventUseCase {
             }
 
             const quiz = await this.quizRepo.findById(input.quizId);
-            if (!quiz) return Result.fail(`NOT_FOUND: Quiz ${input.quizId} not found`);
+            if (!quiz) return Result.fail(`NOT_FOUND: Knowledge Module ${input.quizId} not found`);
             // Each non-empty section becomes a Knowledge Check, in section order.
             const sections = quiz.sections.filter((s) => s.id && s.questionIds.length > 0);
             if (sections.length === 0) {
-                return Result.fail("This quiz has no sections with questions. Each section becomes a Knowledge Check — add sections in the quiz editor first.");
+                return Result.fail("This Knowledge Module has no sections with questions. Each section becomes a Knowledge Check — add sections in the Knowledge Module editor first.");
             }
 
             let joinCode = "";
@@ -131,7 +131,7 @@ export class OpenCheckUseCase {
             const loaded = await loadManaged(this.repo, eventId, userId, scope);
             if (loaded.isFailure) return Result.fail(loaded.errorValue());
             const event = loaded.getValue();
-            if (event.status !== "OPEN") return Result.fail("CONFLICT: This training event has ended");
+            if (event.status !== "OPEN") return Result.fail("CONFLICT: This Training Session has ended");
             const check = await this.repo.findCheck(checkId);
             if (!check || check.trainingEventId !== event.id) return Result.fail(`NOT_FOUND: Knowledge Check ${checkId} not found`);
             if (check.status === "OPEN") return Result.ok<void>();
@@ -151,7 +151,7 @@ export class OpenCheckUseCase {
                         options: q.options.map((o) => ({ text: o.text.value, correct: o.correct })),
                     }));
                 if (snapshot.length === 0) {
-                    return Result.fail(`"${check.name}" has no questions any more — add some to that section of the quiz first`);
+                    return Result.fail(`"${check.name}" has no questions any more — add some to that section of the Knowledge Module first`);
                 }
             }
             await this.repo.openCheck(check.id, snapshot, new Date());
@@ -231,7 +231,7 @@ export class MergeAttendeesUseCase {
             if (intoId === fromId) return Result.fail("Choose a different attendee to merge into");
             const [from, into] = await Promise.all([this.repo.findAttendee(fromId), this.repo.findAttendee(intoId)]);
             if (!from || from.trainingEventId !== eventId || !into || into.trainingEventId !== eventId) {
-                return Result.fail("NOT_FOUND: Attendee not found in this training event");
+                return Result.fail("NOT_FOUND: Attendee not found in this Training Session");
             }
             if (from.mergedIntoId || into.mergedIntoId) return Result.fail("CONFLICT: One of these attendees has already been merged");
             if (from.userId) return Result.fail("Only a guest can be merged into someone else");

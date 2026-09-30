@@ -13,12 +13,12 @@ export class CancelTestSessionUseCase {
         try {
             const session = await this.repo.findById(id);
             if (!session || !isTestSessionWithinScope(session, scope)) {
-                return Result.fail(`NOT_FOUND: Test session with id ${id} not found`);
+                return Result.fail(`NOT_FOUND: Assessment Session with id ${id} not found`);
             }
 
             const current = resolveTestSessionStatus(session.status, session.availableFrom, session.availableUntil);
             if (current === "CLOSED" || current === "CANCELLED" || current === "COMPLETED") {
-                return Result.fail(`CONFLICT: Test session is already ${current}`);
+                return Result.fail(`CONFLICT: Assessment Session is already ${current}`);
             }
 
             const updated = await this.repo.updateStatus(id, "CANCELLED", {});

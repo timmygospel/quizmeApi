@@ -153,7 +153,7 @@ describe("UpdateQuizUseCase — sections", () => {
             const result = await update.execute({ id: quiz.id!, sections: [{ name: "A", questionIds: [stray] }] });
 
             expect(result.isFailure).toBe(true);
-            expect(result.errorValue()).toBe(`Question ${stray} is not part of this quiz`);
+            expect(result.errorValue()).toBe(`Question ${stray} is not part of this Knowledge Module`);
         });
 
         it("drops a blank (discarded) question from its section without failing the save", async () => {
@@ -234,12 +234,12 @@ describe("UpdateQuizUseCase — sections", () => {
             expect(members(result.getValue(), "Product Knowledge")).toEqual([q3, q1]);
         });
 
-        it("rejects a sectionId that isn't one of this quiz's sections", async () => {
+        it("rejects a sectionId that isn't one of this Knowledge Module's sections", async () => {
             const unknown = randomUUID();
             const result = await update.execute({ id: quiz.id!, questions: [q(q1, "Q1", unknown)] });
 
             expect(result.isFailure).toBe(true);
-            expect(result.errorValue()).toBe(`Section ${unknown} is not part of this quiz`);
+            expect(result.errorValue()).toBe(`Section ${unknown} is not part of this Knowledge Module`);
         });
     });
 
@@ -256,13 +256,13 @@ describe("UpdateQuizUseCase — sections", () => {
             ).getValue();
         });
 
-        it("rejects assigning a question to another quiz's section and leaves the question unchanged", async () => {
+        it("rejects assigning a question to another Knowledge Module's section and leaves the question unchanged", async () => {
             const foreign = otherQuiz.sections[0].id!;
 
             const result = await update.execute({ id: quiz.id!, questions: [q(q1, "Q1", foreign), q(q2, "Q2"), q(q3, "Q3")] });
 
             expect(result.isFailure).toBe(true);
-            expect(result.errorValue()).toBe(`Section ${foreign} belongs to another quiz`);
+            expect(result.errorValue()).toBe(`Section ${foreign} belongs to another Knowledge Module`);
             const stored = (await repo.findById(quiz.id!))!;
             expect(stored.questions.map((x) => x.id)).toEqual([q1, q2, q3]);
             expect(stored.sections).toEqual([]);
@@ -278,23 +278,23 @@ describe("UpdateQuizUseCase — sections", () => {
                 sections: [{ name: "Product Knowledge", questionIds: [q1] }],
             });
 
-            expect(result.errorValue()).toBe(`Section ${foreign} belongs to another quiz`);
+            expect(result.errorValue()).toBe(`Section ${foreign} belongs to another Knowledge Module`);
         });
 
-        it("rejects re-using another quiz's section id for a section of this quiz", async () => {
+        it("rejects re-using another Knowledge Module's section id for a section of this Knowledge Module", async () => {
             const foreign = otherQuiz.sections[0].id!;
 
             const result = await update.execute({ id: quiz.id!, sections: [{ id: foreign, name: "Complaint Handling" }] });
 
-            expect(result.errorValue()).toBe(`Section ${foreign} belongs to another quiz`);
+            expect(result.errorValue()).toBe(`Section ${foreign} belongs to another Knowledge Module`);
         });
 
-        it("rejects putting another quiz's question in a section of this quiz", async () => {
+        it("rejects putting another Knowledge Module's question in a section of this Knowledge Module", async () => {
             const foreignQuestion = otherQuiz.questions[0].id!;
 
             const result = await update.execute({ id: quiz.id!, sections: [{ name: "A", questionIds: [foreignQuestion] }] });
 
-            expect(result.errorValue()).toBe(`Question ${foreignQuestion} belongs to another quiz`);
+            expect(result.errorValue()).toBe(`Question ${foreignQuestion} belongs to another Knowledge Module`);
         });
     });
 

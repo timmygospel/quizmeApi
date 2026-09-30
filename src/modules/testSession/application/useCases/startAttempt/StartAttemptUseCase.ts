@@ -38,12 +38,12 @@ export class StartAttemptUseCase {
     async execute(testSessionId: string, userId: string): Promise<Result<StartAttemptResult>> {
         try {
             const session = await this.testSessionRepo.findById(testSessionId);
-            if (!session) return Result.fail(`NOT_FOUND: Test session with id ${testSessionId} not found`);
+            if (!session) return Result.fail(`NOT_FOUND: Assessment Session with id ${testSessionId} not found`);
 
             // Never allow access simply because someone knows the Session id —
             // must be an explicit participant assignment.
             const participant = await this.testSessionRepo.findParticipantForUser(testSessionId, userId);
-            if (!participant) return Result.fail("FORBIDDEN: You are not assigned to this test session");
+            if (!participant) return Result.fail("FORBIDDEN: You are not assigned to this Assessment Session");
 
             const now = new Date();
             const deps = { attemptRepo: this.attemptRepo, testSessionRepo: this.testSessionRepo, assessmentRepo: this.assessmentRepo };
@@ -58,18 +58,18 @@ export class StartAttemptUseCase {
 
             const status = resolveTestSessionStatus(session.status, session.availableFrom, session.availableUntil, now);
             if (status !== "OPEN") {
-                return Result.fail(`CONFLICT: Test session is not currently available (${status})`);
+                return Result.fail(`CONFLICT: Assessment Session is not currently available (${status})`);
             }
 
             if (inProgress) {
                 const assessment = await this.assessmentRepo.findById(session.assessmentId);
-                if (!assessment) return Result.fail("NOT_FOUND: The assessment for this test session could not be found");
+                if (!assessment) return Result.fail("NOT_FOUND: The assessment for this Assessment Session could not be found");
                 const responses = await this.attemptRepo.findResponses(inProgress.id!);
                 return Result.ok({ attempt: inProgress, questions: toAttemptQuestions(assessment), responses, resumed: true });
             }
 
             if (participant.status === "EXPIRED") {
-                return Result.fail("CONFLICT: You missed this test session");
+                return Result.fail("CONFLICT: You missed this Assessment Session");
             }
 
             // A participant who has finished an attempt (submitted, or timed out) may take another
@@ -78,13 +78,13 @@ export class StartAttemptUseCase {
             if (attemptCount >= session.maxAttempts) {
                 return Result.fail(
                     session.maxAttempts === 1
-                        ? "CONFLICT: You have already taken this test session"
-                        : `CONFLICT: You have used all ${session.maxAttempts} attempts for this test session`
+                        ? "CONFLICT: You have already taken this Assessment Session"
+                        : `CONFLICT: You have used all ${session.maxAttempts} attempts for this Assessment Session`
                 );
             }
 
             const assessment = await this.assessmentRepo.findById(session.assessmentId);
-            if (!assessment) return Result.fail("NOT_FOUND: The assessment for this test session could not be found");
+            if (!assessment) return Result.fail("NOT_FOUND: The assessment for this Assessment Session could not be found");
 
             const startedAt = now;
             const expiresAt = computeAttemptExpiry(startedAt, session.timeLimitMinutes, session.availableUntil);
