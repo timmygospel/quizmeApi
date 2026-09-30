@@ -1,10 +1,13 @@
 import { BaseController } from "../../../../../shared/core/BaseController";
 import { SubmitAttemptUseCase } from "../../../application/useCases/submitAttempt/SubmitAttemptUseCase";
-import { AttemptMap } from "../../../mappers/AttemptMap";
+import { GetAttemptResultUseCase } from "../../../application/useCases/getAttemptResult/GetAttemptResultUseCase";
 import { mapFailure } from "./mapFailure";
 
 export class SubmitAttemptController extends BaseController {
-    constructor(private readonly useCase: SubmitAttemptUseCase) {
+    constructor(
+        private readonly useCase: SubmitAttemptUseCase,
+        private readonly getResult: GetAttemptResultUseCase
+    ) {
         super();
     }
 
@@ -18,6 +21,12 @@ export class SubmitAttemptController extends BaseController {
             return;
         }
 
-        this.ok(AttemptMap.toDTO(result.getValue()));
+        // The participant sees only what the assessment's result visibility allows.
+        const visible = await this.getResult.execute(attemptId, userId);
+        if (visible.isFailure) {
+            mapFailure(this, visible.errorValue());
+            return;
+        }
+        this.ok(visible.getValue());
     }
 }

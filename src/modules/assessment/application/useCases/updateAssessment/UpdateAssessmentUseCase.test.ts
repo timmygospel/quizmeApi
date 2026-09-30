@@ -100,4 +100,24 @@ describe("UpdateAssessmentUseCase", () => {
         expect(result.isFailure).toBe(true);
         expect(repo.save).not.toHaveBeenCalled();
     });
+
+    describe("result visibility", () => {
+        it("changes it when given", async () => {
+            const repo = makeRepo();
+            const result = await new UpdateAssessmentUseCase(repo).execute({ ...VALID_DTO, resultVisibility: "PASS_FAIL" });
+            expect(result.getValue().resultVisibility).toBe("PASS_FAIL");
+        });
+
+        it("keeps the current setting when omitted", async () => {
+            const existing = new Assessment({ ...makeAssessment(), resultVisibility: "NONE" });
+            const repo = makeRepo({ findById: jest.fn().mockResolvedValue(existing) });
+            const result = await new UpdateAssessmentUseCase(repo).execute(VALID_DTO);
+            expect(result.getValue().resultVisibility).toBe("NONE");
+        });
+
+        it("rejects an unknown value", async () => {
+            const result = await new UpdateAssessmentUseCase(makeRepo()).execute({ ...VALID_DTO, resultVisibility: "nope" });
+            expect(result.isFailure).toBe(true);
+        });
+    });
 });

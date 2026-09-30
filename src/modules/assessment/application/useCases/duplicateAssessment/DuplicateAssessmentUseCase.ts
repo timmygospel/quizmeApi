@@ -24,6 +24,7 @@ export class DuplicateAssessmentUseCase {
                 passMark: original.passMark,
                 maxAttempts: original.maxAttempts,
                 durationMinutes: original.durationMinutes,
+                resultVisibility: original.resultVisibility,
                 status: "DRAFT",
                 createdBy: dto.requestedBy,
                 createdByName: null,

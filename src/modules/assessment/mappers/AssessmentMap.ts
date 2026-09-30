@@ -6,6 +6,7 @@ import { AssessmentQuestionText } from "../domain/valueObjects/AssessmentQuestio
 import { AssessmentOption } from "../domain/AssessmentOption";
 import { AssessmentOptionText } from "../domain/valueObjects/AssessmentOptionText";
 import { AssessmentDTO, AssessmentDetailDTO } from "../dtos/AssessmentDTO";
+import { isResultVisibility } from "../domain/ResultVisibility";
 
 // Row shape produced by PgAssessmentRepository's join against
 // categories/users — see that file for the SELECT.
@@ -19,6 +20,7 @@ export interface AssessmentRow {
     pass_mark: number;
     max_attempts: number | null;
     duration_minutes: number | null;
+    result_visibility: string;
     status: string;
     created_by: string | null;
     created_by_name: string | null;
@@ -58,6 +60,7 @@ export class AssessmentMap {
             passMark: row.pass_mark,
             maxAttempts: row.max_attempts,
             durationMinutes: row.duration_minutes,
+            resultVisibility: isResultVisibility(row.result_visibility) ? row.result_visibility : undefined,
             status,
             createdBy: row.created_by,
             createdByName: row.created_by_name,
@@ -110,6 +113,7 @@ export class AssessmentMap {
             passMark: assessment.passMark,
             maxAttempts: assessment.maxAttempts,
             durationMinutes: assessment.durationMinutes,
+            resultVisibility: assessment.resultVisibility,
             status: assessment.status,
             createdBy: assessment.createdBy,
             createdByName: assessment.createdByName,

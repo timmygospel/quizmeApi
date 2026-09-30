@@ -72,4 +72,24 @@ describe("CreateAssessmentUseCase", () => {
         expect(result.isFailure).toBe(true);
         expect(repo.save).not.toHaveBeenCalled();
     });
+
+    describe("result visibility", () => {
+        it("defaults to SCORE (what participants always saw before)", async () => {
+            const result = await new CreateAssessmentUseCase(makeRepo()).execute({ name: "Fire Safety", passMark: 70, createdBy: "user-1" });
+            expect(result.getValue().resultVisibility).toBe("SCORE");
+        });
+
+        it("saves the chosen visibility", async () => {
+            const result = await new CreateAssessmentUseCase(makeRepo()).execute({ name: "Fire Safety", passMark: 70, createdBy: "user-1", resultVisibility: "FULL_REVIEW" });
+            expect(result.getValue().resultVisibility).toBe("FULL_REVIEW");
+        });
+
+        it("rejects an unknown value", async () => {
+            const repo = makeRepo();
+            const result = await new CreateAssessmentUseCase(repo).execute({ name: "Fire Safety", passMark: 70, createdBy: "user-1", resultVisibility: "EVERYTHING" });
+            expect(result.isFailure).toBe(true);
+            expect(result.errorValue()).toMatch(/Result visibility/);
+            expect(repo.save).not.toHaveBeenCalled();
+        });
+    });
 });

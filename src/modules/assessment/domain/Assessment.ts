@@ -1,6 +1,7 @@
 import { AssessmentName } from "./valueObjects/AssessmentName";
 import { AssessmentStatus } from "./AssessmentStatus";
 import { AssessmentQuestion } from "./AssessmentQuestion";
+import { ResultVisibility, DEFAULT_RESULT_VISIBILITY } from "./ResultVisibility";
 
 export interface AssessmentProps {
     id?: string;
@@ -18,6 +19,8 @@ export interface AssessmentProps {
     passMark: number;
     maxAttempts: number | null; // null = unlimited
     durationMinutes: number | null; // null = no time limit
+    /** What participants see of their own result; defaults to SCORE. */
+    resultVisibility?: ResultVisibility;
     status: AssessmentStatus;
     createdBy: string | null;
     createdByName: string | null;
@@ -36,6 +39,7 @@ export class Assessment {
     public readonly passMark: number;
     public readonly maxAttempts: number | null;
     public readonly durationMinutes: number | null;
+    public readonly resultVisibility: ResultVisibility;
     public readonly status: AssessmentStatus;
     public readonly createdBy: string | null;
     public readonly createdByName: string | null;
@@ -53,6 +57,7 @@ export class Assessment {
         this.passMark = props.passMark;
         this.maxAttempts = props.maxAttempts;
         this.durationMinutes = props.durationMinutes;
+        this.resultVisibility = props.resultVisibility ?? DEFAULT_RESULT_VISIBILITY;
         this.status = props.status;
         this.createdBy = props.createdBy;
         this.createdByName = props.createdByName;

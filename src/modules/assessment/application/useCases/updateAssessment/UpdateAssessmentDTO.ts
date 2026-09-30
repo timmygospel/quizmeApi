@@ -12,5 +12,7 @@ export interface UpdateAssessmentDTO {
     passMark: number;
     maxAttempts?: number | null;
     durationMinutes?: number | null;
+    /** NONE | PASS_FAIL | SCORE | FULL_REVIEW — omitted = keep the current setting. */
+    resultVisibility?: string;
     questions: UpdateAssessmentQuestionInputDTO[];
 }

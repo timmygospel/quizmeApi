@@ -62,6 +62,15 @@ export interface MyTestSessionRow {
     participant: TestSessionParticipant;
     /** Attempts started so far, finished or not. */
     attemptsUsed: number;
+    /** What the participant needs to know before starting, and which result they can view. */
+    details: {
+        assessmentName: string;
+        questionCount: number;
+        passMark: number;
+        trainerName: string | null;
+        /** The attempt that counts (their best finished one); null until something is finished. */
+        resultAttemptId: string | null;
+    };
 }
 
 export interface ITestSessionRepository {

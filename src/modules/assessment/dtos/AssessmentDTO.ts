@@ -8,6 +8,7 @@ export interface AssessmentDTO {
     passMark: number;
     maxAttempts: number | null;
     durationMinutes: number | null;
+    resultVisibility: string;
     status: string;
     createdBy: string | null;
     createdByName: string | null;

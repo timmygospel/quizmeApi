@@ -3,7 +3,8 @@ import { makeAttemptRepo, makeAssessmentRepo, makeParticipant, makeSession, make
 import { ParticipantStatus } from "../../../domain/TestSessionParticipant";
 
 function repoWith(status: ParticipantStatus, attemptsUsed: number, sessionOverrides = {}) {
-    const row = { session: makeSession({ maxAttempts: 3, ...sessionOverrides }), participant: makeParticipant(status), attemptsUsed };
+    const row = { session: makeSession({ maxAttempts: 3, ...sessionOverrides }), participant: makeParticipant(status), attemptsUsed,
+        details: { assessmentName: "Sales Skills", questionCount: 20, passMark: 80, trainerName: "Sam Owner", resultAttemptId: null } };
     return makeTestSessionRepo({ findMyTestSessions: jest.fn().mockResolvedValue([row]) });
 }
 
@@ -32,5 +33,12 @@ describe("GetMyTestSessionsUseCase — retakes", () => {
 
     it("no retake while an attempt is in progress", async () => {
         expect((await mine(repoWith("IN_PROGRESS", 1))).canRetake).toBe(false);
+    });
+});
+
+describe("GetMyTestSessionsUseCase — details", () => {
+    it("includes what the participant needs before starting", async () => {
+        const item = await mine(repoWith("ASSIGNED", 0));
+        expect(item).toMatchObject({ assessmentName: "Sales Skills", questionCount: 20, passMark: 80, trainerName: "Sam Owner", resultAttemptId: null });
     });
 });

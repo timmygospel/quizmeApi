@@ -20,6 +20,7 @@ import { StartAttemptUseCase } from "../../application/useCases/startAttempt/Sta
 import { SaveResponseUseCase } from "../../application/useCases/saveResponse/SaveResponseUseCase";
 import { SubmitAttemptUseCase } from "../../application/useCases/submitAttempt/SubmitAttemptUseCase";
 import { MarkForReviewUseCase } from "../../application/useCases/markForReview/MarkForReviewUseCase";
+import { GetAttemptResultUseCase } from "../../application/useCases/getAttemptResult/GetAttemptResultUseCase";
 
 import { PreviewAudienceController } from "./controllers/PreviewAudienceController";
 import { CreateTestSessionController } from "./controllers/CreateTestSessionController";
@@ -35,6 +36,7 @@ import { StartAttemptController } from "./controllers/StartAttemptController";
 import { SaveResponseController } from "./controllers/SaveResponseController";
 import { SubmitAttemptController } from "./controllers/SubmitAttemptController";
 import { MarkForReviewController } from "./controllers/MarkForReviewController";
+import { GetAttemptResultController } from "./controllers/GetAttemptResultController";
 
 import {
     requireAuthenticatedUser,
@@ -80,9 +82,12 @@ const startAttemptController = new StartAttemptController(
 const saveResponseController = new SaveResponseController(
     new SaveResponseUseCase(attemptRepo, testSessionRepo, assessmentRepo)
 );
+const getAttemptResultUseCase = new GetAttemptResultUseCase(attemptRepo, testSessionRepo, assessmentRepo);
 const submitAttemptController = new SubmitAttemptController(
-    new SubmitAttemptUseCase(attemptRepo, testSessionRepo, assessmentRepo)
+    new SubmitAttemptUseCase(attemptRepo, testSessionRepo, assessmentRepo),
+    getAttemptResultUseCase
 );
+const getAttemptResultController = new GetAttemptResultController(getAttemptResultUseCase);
 const markForReviewController = new MarkForReviewController(
     new MarkForReviewUseCase(attemptRepo, testSessionRepo, assessmentRepo)
 );
@@ -159,6 +164,9 @@ router.put("/attempts/:attemptId/questions/:questionId/response", requireAuthent
 );
 router.put("/attempts/:attemptId/questions/:questionId/review", requireAuthenticatedUser, (req, res) =>
     markForReviewController.execute(req, res)
+);
+router.get("/attempts/:attemptId/result", requireAuthenticatedUser, (req, res) =>
+    getAttemptResultController.execute(req, res)
 );
 router.post("/attempts/:attemptId/submit", requireAuthenticatedUser, (req, res) =>
     submitAttemptController.execute(req, res)

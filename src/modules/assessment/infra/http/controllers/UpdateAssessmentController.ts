@@ -19,6 +19,7 @@ export class UpdateAssessmentController extends BaseController {
                 passMark: body.passMark,
                 maxAttempts: body.maxAttempts ?? null,
                 durationMinutes: body.durationMinutes ?? null,
+                resultVisibility: body.resultVisibility,
                 questions: body.questions ?? [],
             };
 

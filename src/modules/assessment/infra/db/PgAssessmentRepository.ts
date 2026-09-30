@@ -15,7 +15,7 @@ const LIST_SELECT = `
         a.id, a.name, a.description,
         a.category_id, c.name AS category_name,
         COUNT(aq.id)::int AS question_count,
-        a.pass_mark, a.max_attempts, a.duration_minutes,
+        a.pass_mark, a.max_attempts, a.duration_minutes, a.result_visibility,
         a.status,
         a.created_by, (u.first_name || ' ' || u.last_name) AS created_by_name,
         a.created_at, a.updated_at
@@ -31,7 +31,7 @@ const DETAIL_SELECT = `
         a.id, a.name, a.description,
         a.category_id, c.name AS category_name,
         0 AS question_count,
-        a.pass_mark, a.max_attempts, a.duration_minutes,
+        a.pass_mark, a.max_attempts, a.duration_minutes, a.result_visibility,
         a.status,
         a.created_by, (u.first_name || ' ' || u.last_name) AS created_by_name,
         a.created_at, a.updated_at
@@ -85,7 +85,7 @@ export class PgAssessmentRepository implements IAssessmentRepository {
                     `UPDATE assessments SET
                         name = $1, description = $2, category_id = $3,
                         pass_mark = $4, max_attempts = $5, duration_minutes = $6,
-                        status = $7, updated_at = now()
+                        status = $7, result_visibility = $9, updated_at = now()
                      WHERE id = $8`,
                     [
                         assessment.name.value,
@@ -96,6 +96,7 @@ export class PgAssessmentRepository implements IAssessmentRepository {
                         assessment.durationMinutes,
                         assessment.status,
                         assessment.id,
+                        assessment.resultVisibility,
                     ]
                 );
 
@@ -139,8 +140,8 @@ export class PgAssessmentRepository implements IAssessmentRepository {
 
         const { rows } = await pgPool.query(
             `INSERT INTO assessments
-                (name, description, category_id, question_count, pass_mark, max_attempts, duration_minutes, status, created_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                (name, description, category_id, question_count, pass_mark, max_attempts, duration_minutes, status, created_by, result_visibility)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              RETURNING id`,
             [
                 assessment.name.value,
@@ -152,6 +153,7 @@ export class PgAssessmentRepository implements IAssessmentRepository {
                 assessment.durationMinutes,
                 assessment.status,
                 assessment.createdBy,
+                assessment.resultVisibility,
             ]
         );
         return (await this.findById(rows[0].id))!;

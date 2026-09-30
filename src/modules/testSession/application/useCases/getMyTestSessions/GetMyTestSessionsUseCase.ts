@@ -34,7 +34,7 @@ export class GetMyTestSessionsUseCase {
             // A cancelled session can't be taken — don't offer it.
             const items: MyTestSessionDTO[] = rows
                 .filter(({ session }) => session.status !== "CANCELLED")
-                .map(({ session, participant, attemptsUsed }) => {
+                .map(({ session, participant, attemptsUsed, details }) => {
                     const status = deriveMyTestSessionStatus(participant.status, session.availableFrom, session.availableUntil, now);
                     const open = resolveTestSessionStatus(session.status, session.availableFrom, session.availableUntil, now) === "OPEN";
                     return {
@@ -48,6 +48,7 @@ export class GetMyTestSessionsUseCase {
                         maxAttempts: session.maxAttempts,
                         attemptsUsed,
                         canRetake: (status === "SUBMITTED" || status === "TIMED_OUT") && open && attemptsUsed < session.maxAttempts,
+                        ...details,
                     };
                 });
 

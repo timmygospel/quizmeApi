@@ -8,6 +8,7 @@ import { AssessmentOption } from "../../../domain/AssessmentOption";
 import { AssessmentOptionText } from "../../../domain/valueObjects/AssessmentOptionText";
 import { Result } from "../../../../../shared/core/Result";
 import { UseCase } from "../../../../../shared/core/UseCase";
+import { isResultVisibility } from "../../../domain/ResultVisibility";
 
 // Full-replace update, mirroring UpdateQuizUseCase's one-shot semantics —
 // the whole editable surface (details, pass criteria, attempts, duration,
@@ -36,6 +37,9 @@ export class UpdateAssessmentUseCase implements UseCase<UpdateAssessmentDTO, Pro
             }
             if (dto.durationMinutes != null && dto.durationMinutes <= 0) {
                 return Result.fail("Time limit must be greater than 0 minutes");
+            }
+            if (dto.resultVisibility !== undefined && !isResultVisibility(dto.resultVisibility)) {
+                return Result.fail("Result visibility must be one of NONE, PASS_FAIL, SCORE or FULL_REVIEW");
             }
 
             const questions = (dto.questions ?? [])
@@ -66,6 +70,7 @@ export class UpdateAssessmentUseCase implements UseCase<UpdateAssessmentDTO, Pro
                 passMark: dto.passMark,
                 maxAttempts: dto.maxAttempts ?? null,
                 durationMinutes: dto.durationMinutes ?? null,
+                resultVisibility: isResultVisibility(dto.resultVisibility) ? dto.resultVisibility : existing.resultVisibility,
                 status: existing.status,
                 createdBy: existing.createdBy,
                 createdByName: null,

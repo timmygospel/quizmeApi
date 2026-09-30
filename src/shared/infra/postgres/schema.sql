@@ -549,6 +549,11 @@ CREATE TABLE IF NOT EXISTS assessments (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- What participants see of their own result (see domain/ResultVisibility.ts). SCORE = what they
+-- were always shown before this setting existed.
+ALTER TABLE assessments ADD COLUMN IF NOT EXISTS result_visibility TEXT NOT NULL DEFAULT 'SCORE'
+    CHECK (result_visibility IN ('NONE', 'PASS_FAIL', 'SCORE', 'FULL_REVIEW'));
+
 -- Assessment's own copy of reused Question Bank content (ASSESSMENTS.md
 -- §14/§33: content is copied at add-time and frozen, not live-referenced,
 -- so a later edit to the bank question never silently changes a published

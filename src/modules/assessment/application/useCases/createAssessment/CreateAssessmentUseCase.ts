@@ -1,6 +1,7 @@
 import { IAssessmentRepository } from "../../../domain/IAssessmentRepository";
 import { CreateAssessmentDTO } from "./CreateAssessmentDTO";
 import { Assessment } from "../../../domain/Assessment";
+import { isResultVisibility } from "../../../domain/ResultVisibility";
 import { AssessmentName } from "../../../domain/valueObjects/AssessmentName";
 import { Result } from "../../../../../shared/core/Result";
 import { UseCase } from "../../../../../shared/core/UseCase";
@@ -22,6 +23,9 @@ export class CreateAssessmentUseCase implements UseCase<CreateAssessmentDTO, Pro
             if (dto.durationMinutes != null && dto.durationMinutes <= 0) {
                 return Result.fail("Time limit must be greater than 0 minutes");
             }
+            if (dto.resultVisibility !== undefined && !isResultVisibility(dto.resultVisibility)) {
+                return Result.fail("Result visibility must be one of NONE, PASS_FAIL, SCORE or FULL_REVIEW");
+            }
 
             const assessment = new Assessment({
                 name: nameOrError.getValue(),
@@ -32,6 +36,7 @@ export class CreateAssessmentUseCase implements UseCase<CreateAssessmentDTO, Pro
                 passMark: dto.passMark,
                 maxAttempts: dto.maxAttempts ?? null,
                 durationMinutes: dto.durationMinutes ?? null,
+                resultVisibility: isResultVisibility(dto.resultVisibility) ? dto.resultVisibility : undefined,
                 status: "DRAFT",
                 createdBy: dto.createdBy,
                 createdByName: null,

@@ -291,6 +291,11 @@ export class PgTestSessionRepository implements ITestSessionRepository {
                 participant_started_at: Date | null;
                 participant_completed_at: Date | null;
                 attempts_used: number;
+                assessment_name: string;
+                question_count: number;
+                pass_mark: number;
+                trainer_name: string | null;
+                counted_attempt_id: string | null;
             }
         >(
             `SELECT ts.*,
@@ -306,9 +311,17 @@ export class PgTestSessionRepository implements ITestSessionRepository {
                     p.assigned_at AS participant_assigned_at,
                     p.started_at AS participant_started_at,
                     p.completed_at AS participant_completed_at,
-                    (SELECT COUNT(*) FROM test_attempts ta WHERE ta.test_session_participant_id = p.id)::int AS attempts_used
+                    (SELECT COUNT(*) FROM test_attempts ta WHERE ta.test_session_participant_id = p.id)::int AS attempts_used,
+                    asm.name AS assessment_name,
+                    asm.pass_mark,
+                    (SELECT COUNT(*) FROM assessment_questions aq WHERE aq.assessment_id = asm.id)::int AS question_count,
+                    NULLIF(TRIM(COALESCE(o.first_name, '') || ' ' || COALESCE(o.last_name, '')), '') AS trainer_name,
+                    a.id AS counted_attempt_id
              FROM test_session_participants p
              JOIN test_sessions ts ON ts.id = p.test_session_id
+             JOIN assessments asm ON asm.id = ts.assessment_id
+             LEFT JOIN users o ON o.id = ts.owner_id
+             ${COUNTED_ATTEMPT_JOIN}
              WHERE p.user_id = $1
              ORDER BY ts.available_from DESC`,
             [userId]
@@ -316,6 +329,13 @@ export class PgTestSessionRepository implements ITestSessionRepository {
 
         return rows.map((r) => ({
             attemptsUsed: Number(r.attempts_used),
+            details: {
+                assessmentName: r.assessment_name,
+                questionCount: Number(r.question_count),
+                passMark: Number(r.pass_mark),
+                trainerName: r.trainer_name,
+                resultAttemptId: r.counted_attempt_id,
+            },
             session: TestSessionMap.toDomain(r, []),
             participant: participantRowToDomain({
                 id: r.participant_id,

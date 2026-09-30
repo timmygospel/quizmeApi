@@ -99,4 +99,10 @@ describe("PublishAssessmentUseCase", () => {
         const result = await new PublishAssessmentUseCase(repo).execute("assess-1");
         expect(result.errorValue()).toBe("ASSESSMENT_HAS_INVALID_QUESTIONS");
     });
+
+    it("keeps the result visibility when publishing", async () => {
+        const repo = makeRepo(new Assessment({ ...makeAssessment(), resultVisibility: "FULL_REVIEW" }));
+        await new PublishAssessmentUseCase(repo).execute("assess-1");
+        expect(repo.save).toHaveBeenCalledWith(expect.objectContaining({ status: "PUBLISHED", resultVisibility: "FULL_REVIEW" }));
+    });
 });

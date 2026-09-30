@@ -43,3 +43,28 @@ export interface AttemptResponseAckDTO {
     selectedOptionId: string | null;
     answeredAt: string;
 }
+
+export interface ReviewOptionDTO {
+    id: string;
+    text: string;
+    correct: boolean;
+}
+
+export interface ReviewQuestionDTO {
+    id: string;
+    question: string;
+    options: ReviewOptionDTO[];
+    /** The participant's answer; null = not answered. */
+    selectedOptionId: string | null;
+    isCorrect: boolean;
+}
+
+/**
+ * A finished attempt as the participant may see it, filtered by the assessment's result
+ * visibility. Fields the participant isn't allowed to see are null (never omitted), and
+ * `review` is present only for FULL_REVIEW.
+ */
+export interface ParticipantResultDTO extends AttemptDTO {
+    resultVisibility: "NONE" | "PASS_FAIL" | "SCORE" | "FULL_REVIEW";
+    review?: ReviewQuestionDTO[];
+}
