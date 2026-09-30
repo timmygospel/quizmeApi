@@ -70,6 +70,11 @@ export class CreateTestSessionUseCase {
             // Resolve audience -> explicit participants at creation time
             // (never recomputed dynamically at reporting time).
             const matches = await this.testSessionRepo.resolveActiveUsers(audience);
+            // A session nobody can take is almost always a mistake (wrong location/department, or the
+            // people haven't been set up yet) — refuse rather than create an empty session.
+            if (matches.length === 0) {
+                return Result.fail("No active employees match this audience. Choose a location and department that have people in them.");
+            }
             const teamByPair = new Map(audience.map((r) => [`${r.locationId}:${r.departmentId}`, r.teamId ?? null]));
             const participants: ParticipantAssignmentInput[] = matches.map((m) => ({
                 userId: m.userId,

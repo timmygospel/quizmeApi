@@ -142,4 +142,15 @@ describe("CreateTestSessionUseCase", () => {
 
         expect(result.isFailure).toBe(true);
     });
+
+    it("refuses an audience that matches no one", async () => {
+        const testSessionRepo = makeTestSessionRepo({ resolveActiveUsers: jest.fn().mockResolvedValue([]) });
+        const useCase = new CreateTestSessionUseCase(testSessionRepo, makeAssessmentRepo());
+
+        const result = await useCase.execute(baseDto(), "owner-1");
+
+        expect(result.isFailure).toBe(true);
+        expect(result.errorValue()).toMatch(/No active employees match this audience/);
+        expect(testSessionRepo.create).not.toHaveBeenCalled();
+    });
 });
