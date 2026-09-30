@@ -8,6 +8,7 @@ import { recordAuditEvent } from "../../../shared/infra/audit/recordAuditEvent";
 import { IQuizRepository } from "../../quiz/domain/IQuizRepository";
 import { ITrainingEventRepository } from "../domain/ITrainingEventRepository";
 import { newJoinCode } from "../domain/credentials";
+import { ITrainingEventNotifier, silentNotifier } from "../domain/ITrainingEventNotifier";
 import { TrainingEvent } from "../domain/TrainingEvent";
 import {
     TrainingEventDTO,
@@ -119,7 +120,11 @@ export class GetTrainingEventUseCase {
 }
 
 export class OpenCheckUseCase {
-    constructor(private repo: ITrainingEventRepository, private quizRepo: IQuizRepository) { }
+    constructor(
+        private repo: ITrainingEventRepository,
+        private quizRepo: IQuizRepository,
+        private notifier: ITrainingEventNotifier = silentNotifier
+    ) { }
 
     execute(eventId: string, checkId: string, userId: string, scope?: EffectiveScope): Promise<Result<void>> {
         return run(async () => {
@@ -150,6 +155,7 @@ export class OpenCheckUseCase {
                 }
             }
             await this.repo.openCheck(check.id, snapshot, new Date());
+            this.notifier.checksChanged(event.joinCode);
             await recordAuditEvent({
                 actorUserId: userId, eventType: "KNOWLEDGE_CHECK_OPENED", entityType: "training_event", entityId: event.id,
                 metadata: { checkId: check.id, name: check.name },
@@ -160,7 +166,7 @@ export class OpenCheckUseCase {
 }
 
 export class CloseCheckUseCase {
-    constructor(private repo: ITrainingEventRepository) { }
+    constructor(private repo: ITrainingEventRepository, private notifier: ITrainingEventNotifier = silentNotifier) { }
 
     execute(eventId: string, checkId: string, userId: string, scope?: EffectiveScope): Promise<Result<void>> {
         return run(async () => {
@@ -170,6 +176,7 @@ export class CloseCheckUseCase {
             if (!check || check.trainingEventId !== eventId) return Result.fail(`NOT_FOUND: Knowledge Check ${checkId} not found`);
             if (check.status !== "OPEN") return Result.ok<void>();
             await this.repo.closeCheck(check.id, new Date());
+            this.notifier.checksChanged(loaded.getValue().joinCode);
             await recordAuditEvent({
                 actorUserId: userId, eventType: "KNOWLEDGE_CHECK_CLOSED", entityType: "training_event", entityId: eventId,
                 metadata: { checkId: check.id, name: check.name },
@@ -180,7 +187,7 @@ export class CloseCheckUseCase {
 }
 
 export class EndTrainingEventUseCase {
-    constructor(private repo: ITrainingEventRepository) { }
+    constructor(private repo: ITrainingEventRepository, private notifier: ITrainingEventNotifier = silentNotifier) { }
 
     execute(eventId: string, userId: string, scope?: EffectiveScope): Promise<Result<void>> {
         return run(async () => {
@@ -188,6 +195,7 @@ export class EndTrainingEventUseCase {
             if (loaded.isFailure) return Result.fail(loaded.errorValue());
             if (loaded.getValue().status === "ENDED") return Result.ok<void>();
             await this.repo.endEvent(eventId, new Date());
+            this.notifier.checksChanged(loaded.getValue().joinCode);
             await recordAuditEvent({ actorUserId: userId, eventType: "TRAINING_EVENT_ENDED", entityType: "training_event", entityId: eventId });
             return Result.ok<void>();
         });
@@ -213,7 +221,7 @@ export class GetTrainingEventResultsUseCase {
 // A guest who lost their browser data and joined again shows up twice; the trainer folds the new
 // record into the old one. Only a guest can be merged away — signed-in attendees are one per user.
 export class MergeAttendeesUseCase {
-    constructor(private repo: ITrainingEventRepository) { }
+    constructor(private repo: ITrainingEventRepository, private notifier: ITrainingEventNotifier = silentNotifier) { }
 
     execute(eventId: string, fromId: string, intoId: unknown, userId: string, scope?: EffectiveScope): Promise<Result<void>> {
         return run(async () => {
@@ -228,6 +236,7 @@ export class MergeAttendeesUseCase {
             if (from.mergedIntoId || into.mergedIntoId) return Result.fail("CONFLICT: One of these attendees has already been merged");
             if (from.userId) return Result.fail("Only a guest can be merged into someone else");
             await this.repo.mergeAttendees(from.id, into.id);
+            this.notifier.progress(loaded.getValue().joinCode);
             await recordAuditEvent({
                 actorUserId: userId, eventType: "TRAINING_EVENT_ATTENDEES_MERGED", entityType: "training_event", entityId: eventId,
                 metadata: { from: from.id, into: into.id },

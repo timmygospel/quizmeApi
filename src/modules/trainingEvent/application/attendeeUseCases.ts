@@ -4,6 +4,7 @@
 import { Result } from "../../../shared/core/Result";
 import { ITrainingEventRepository } from "../domain/ITrainingEventRepository";
 import { hashAttendeeToken, newAttendeeToken, normaliseJoinCode } from "../domain/credentials";
+import { ITrainingEventNotifier, silentNotifier } from "../domain/ITrainingEventNotifier";
 import { Attendee, CheckQuestion, CheckResponse, TrainingEvent, cleanDisplayName, scoreCheck } from "../domain/TrainingEvent";
 import {
     AttendeeDTO,
@@ -68,7 +69,7 @@ export class GetEventForAttendeeUseCase {
 
 /** First visit: enter a name once; the browser gets a token that brings it back from then on. */
 export class JoinAsGuestUseCase {
-    constructor(private repo: ITrainingEventRepository) { }
+    constructor(private repo: ITrainingEventRepository, private notifier: ITrainingEventNotifier = silentNotifier) { }
 
     execute(joinCode: string, rawName: unknown): Promise<Result<JoinResultDTO>> {
         return run(async () => {
@@ -78,7 +79,9 @@ export class JoinAsGuestUseCase {
             const name = cleanDisplayName(rawName);
             if (!name) return Result.fail("Enter your name (up to 60 characters)");
             const attendee = await this.repo.createAttendee(event.id, name, null);
-            return Result.ok(await issueToken(this.repo, attendee));
+            const joined = await issueToken(this.repo, attendee);
+            this.notifier.progress(event.joinCode);
+            return Result.ok(joined);
         });
     }
 }
@@ -169,7 +172,7 @@ export class GetCurrentActivityUseCase {
 
 async function openCheckFor(
     repo: ITrainingEventRepository, joinCode: string, token: string | undefined, checkId: string
-): Promise<Result<{ attendee: Attendee; questions: CheckQuestion[] }>> {
+): Promise<Result<{ event: TrainingEvent; attendee: Attendee; questions: CheckQuestion[] }>> {
     const event = await findEvent(repo, joinCode);
     if (!event) return Result.fail("NOT_FOUND: No training event has that code — check it with your trainer");
     const attendee = await attendeeFor(repo, event, token);
@@ -179,7 +182,7 @@ async function openCheckFor(
     if (event.status !== "OPEN" || check.status !== "OPEN") return Result.fail("CONFLICT: This Knowledge Check is closed");
     const attempt = await repo.findAttempt(check.id, attendee.id);
     if (attempt?.submittedAt) return Result.fail("CONFLICT: You've already submitted this Knowledge Check");
-    return Result.ok({ attendee, questions: await repo.findCheckQuestions(check.id) });
+    return Result.ok({ event, attendee, questions: await repo.findCheckQuestions(check.id) });
 }
 
 /** Autosave: picking an option saves it straight away (changing it overwrites). */
@@ -206,16 +209,17 @@ export class SaveCheckAnswerUseCase {
 
 /** Submit: scored on what was answered (unanswered = wrong); returns the score and correct answers. */
 export class SubmitCheckUseCase {
-    constructor(private repo: ITrainingEventRepository) { }
+    constructor(private repo: ITrainingEventRepository, private notifier: ITrainingEventNotifier = silentNotifier) { }
 
     execute(joinCode: string, token: string | undefined, checkId: string): Promise<Result<CheckResultDTO>> {
         return run(async () => {
             const loaded = await openCheckFor(this.repo, joinCode, token, checkId);
             if (loaded.isFailure) return Result.fail(loaded.errorValue());
-            const { attendee, questions } = loaded.getValue();
+            const { event, attendee, questions } = loaded.getValue();
             const responses = await this.repo.findResponses(checkId, attendee.id);
             const score = scoreCheck(questions.length, responses);
             const attempt = await this.repo.submitAttempt(checkId, attendee.id, score, new Date());
+            this.notifier.progress(event.joinCode);
             return Result.ok(review(questions, responses, attempt.scorePercentage ?? score));
         });
     }

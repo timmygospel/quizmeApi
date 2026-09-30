@@ -23,6 +23,8 @@ import {
     SubmitCheckUseCase,
 } from "../../application/attendeeUseCases";
 import { UseCaseController } from "./UseCaseController";
+import { getIO } from "../../../../socket";
+import { createSocketTrainingEventNotifier } from "../../../../socket/trainingEventHandlers";
 import {
     requireAuthenticatedUser,
     createRequirePermission,
@@ -36,6 +38,8 @@ const userRepo = new PgUserRepository();
 const roleRepo = new PgRoleRepository();
 const requirePermission = createRequirePermission(userRepo, roleRepo);
 const applyEffectiveScope = createApplyEffectiveScope(userRepo, roleRepo);
+// Nudges open browsers (attendees' phones, the trainer's screen) to refetch after a change.
+const notifier = createSocketTrainingEventNotifier(getIO);
 
 // ── Trainer: running a training event needs session.host (Trainer, Admin) ──
 const trainer = [requireAuthenticatedUser, requirePermission("session.host"), applyEffectiveScope];
@@ -45,11 +49,11 @@ const param = (req: Request, name: string) => String(req.params[name]);
 const createEvent = new CreateTrainingEventUseCase(repo, quizRepo);
 const listEvents = new ListTrainingEventsUseCase(repo);
 const getEvent = new GetTrainingEventUseCase(repo);
-const openCheck = new OpenCheckUseCase(repo, quizRepo);
-const closeCheck = new CloseCheckUseCase(repo);
-const endEvent = new EndTrainingEventUseCase(repo);
+const openCheck = new OpenCheckUseCase(repo, quizRepo, notifier);
+const closeCheck = new CloseCheckUseCase(repo, notifier);
+const endEvent = new EndTrainingEventUseCase(repo, notifier);
 const getResults = new GetTrainingEventResultsUseCase(repo);
-const mergeAttendees = new MergeAttendeesUseCase(repo);
+const mergeAttendees = new MergeAttendeesUseCase(repo, notifier);
 
 const handle = <T>(fn: ConstructorParameters<typeof UseCaseController<T>>[0], status: 200 | 201 = 200) =>
     (req: Request, res: express.Response) => new UseCaseController(fn, status).execute(req, res);
@@ -71,12 +75,12 @@ const token = (req: Request) => req.header("x-attendee-token") || undefined;
 const code = (req: Request) => param(req, "joinCode");
 
 const eventForAttendee = new GetEventForAttendeeUseCase(repo);
-const joinAsGuest = new JoinAsGuestUseCase(repo);
+const joinAsGuest = new JoinAsGuestUseCase(repo, notifier);
 const listGuests = new ListGuestsUseCase(repo);
 const rejoinAsGuest = new RejoinAsGuestUseCase(repo);
 const currentActivity = new GetCurrentActivityUseCase(repo);
 const saveAnswer = new SaveCheckAnswerUseCase(repo);
-const submitCheck = new SubmitCheckUseCase(repo);
+const submitCheck = new SubmitCheckUseCase(repo, notifier);
 
 router.get("/attend/:joinCode", handle((req) => eventForAttendee.execute(code(req), token(req))));
 router.post("/attend/:joinCode/attendees", handle((req) => joinAsGuest.execute(code(req), req.body?.name), 201));

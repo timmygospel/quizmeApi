@@ -10,6 +10,7 @@ import { Option } from "../../quiz/domain/Option";
 import { OptionText } from "../../quiz/domain/valueObjects/OptionText";
 import { EffectiveScope } from "../../../shared/core/EffectiveScope";
 import {
+    CloseCheckUseCase,
     CreateTrainingEventUseCase,
     GetTrainingEventUseCase,
     MergeAttendeesUseCase,
@@ -196,5 +197,32 @@ describe("attendee", () => {
         expect(result.scorePercentage).toBe(50);
         expect(result.review.map((r) => [r.questionId, r.selectedIndex, r.isCorrect])).toEqual([["cq-1", 0, true], ["cq-2", null, false]]);
         expect(result.review[1].options).toEqual([{ text: "30 days", correct: true }, { text: "Never", correct: false }]);
+    });
+});
+
+describe("live nudges", () => {
+    const notifier = () => ({ checksChanged: jest.fn(), progress: jest.fn() });
+
+    it("opening and closing a check tell attendees; failures and no-ops don't", async () => {
+        const n = notifier();
+        const pending = makeRepo({ findCheck: jest.fn().mockResolvedValue({ ...CHECK, status: "PENDING" }) });
+        const quizRepo = quizWithSections([{ id: "sec-1", name: "Product Knowledge", questionIds: ["q1"] }]);
+        await new OpenCheckUseCase(pending, quizRepo, n).execute("ev-1", "chk-1", "trainer-1", trainerScope);
+        await new CloseCheckUseCase(makeRepo(), n).execute("ev-1", "chk-1", "trainer-1", trainerScope);
+        expect(n.checksChanged).toHaveBeenCalledTimes(2);
+        expect(n.checksChanged).toHaveBeenCalledWith("K7M9QX");
+
+        const quiet = notifier();
+        await new OpenCheckUseCase(makeRepo(), quizRepo, quiet).execute("ev-1", "chk-1", "trainer-1", trainerScope); // already open
+        await new CloseCheckUseCase(makeRepo(), quiet).execute("ev-1", "chk-1", "someone-else", { ...trainerScope, userId: "someone-else" });
+        expect(quiet.checksChanged).not.toHaveBeenCalled();
+    });
+
+    it("joining and submitting tell the trainer", async () => {
+        const n = notifier();
+        await new JoinAsGuestUseCase(makeRepo(), n).execute("K7M9QX", "Jo");
+        await new SubmitCheckUseCase(makeRepo(), n).execute("K7M9QX", "tok", "chk-1");
+        expect(n.progress).toHaveBeenCalledTimes(2);
+        expect(n.checksChanged).not.toHaveBeenCalled();
     });
 });

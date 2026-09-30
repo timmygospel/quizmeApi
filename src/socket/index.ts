@@ -4,6 +4,7 @@ import { createAdapter } from "@socket.io/redis-adapter";
 import { isOriginAllowed } from "../shared/config/corsOrigins";
 import { redisPub, redisSub } from "../shared/infra/redis/redisClient";
 import { registerLiveEventHandlers } from "./liveEventHandlers";
+import { registerTrainingEventHandlers } from "./trainingEventHandlers";
 
 let io: Server | null = null;
 
@@ -30,6 +31,7 @@ export function initSocketServer(server: HttpServer) {
     }
 
     registerLiveEventHandlers(io);
+    registerTrainingEventHandlers(io);
 
     return io;
 }
