@@ -1,0 +1,62 @@
+# Render Blueprint — API + Postgres + Redis (Key Value).
+# Render → New → Blueprint → pick this repo. After that, every push to `dev`
+# auto-deploys.
+#
+# Free-tier caveats: the web service sleeps after ~15 min idle (first request
+# takes ~1 min to wake, and open Socket.IO connections drop when it sleeps);
+# the free Postgres expires 30 days after creation unless upgraded.
+
+services:
+  - type: web
+    name: quizme-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: dev
+    autoDeploy: true
+    # --include=dev: typescript is a devDependency and NODE_ENV=production
+    # would otherwise make `npm ci` skip it.
+    buildCommand: npm ci --include=dev && npm run build
+    # schema.sql is idempotent, so migrating on every boot is safe (Render's
+    # preDeployCommand isn't available on the free plan).
+    startCommand: npm run db:migrate:prod && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.16.0
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: quizme-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: quizme-redis
+          property: connectionString
+      - key: AUTH_PROVIDER
+        value: clerk
+      # Prompted for on first Blueprint sync.
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: CLERK_PUBLISHABLE_KEY
+        sync: false
+      # The frontend's Render URL, e.g. https://quizme-web.onrender.com
+      - key: CORS_EXTRA_ORIGINS
+        sync: false
+
+  - type: keyvalue
+    name: quizme-redis
+    plan: free
+    region: frankfurt
+    maxmemoryPolicy: noeviction
+    ipAllowList: [] # internal connections only
+
+databases:
+  - name: quizme-db
+    plan: free
+    region: frankfurt
+    databaseName: quizmeapi
+    user: quizmeapi
+    postgresMajorVersion: "16"

@@ -23,6 +23,15 @@ export interface QuestionSnapshotInput {
 }
 
 export class PgLiveEventRepository {
+    /** True only for an existing, archived quiz (unknown ids are left to the FK). */
+    async isQuizArchived(quizId: string): Promise<boolean> {
+        const { rows } = await pgPool.query<{ archived: boolean }>(
+            "SELECT archived_at IS NOT NULL AS archived FROM quizzes WHERE id::text = $1",
+            [quizId]
+        );
+        return rows[0]?.archived ?? false;
+    }
+
     async create(params: {
         eventCode: string;
         name: string;

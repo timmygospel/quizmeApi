@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { IQuizRepository } from "../domain/IQuizRepository";
+import { IQuizRepository, QuizUsage } from "../domain/IQuizRepository";
 import { Quiz } from "../domain/Quiz";
 import { Question } from "../domain/Question";
 import { Option } from "../domain/Option";
@@ -12,13 +12,15 @@ import { Option } from "../domain/Option";
  */
 export class InMemoryQuizRepository implements IQuizRepository {
     public readonly quizzes = new Map<string, Quiz>();
+    /** Seed per-quiz usage to simulate runs that reference a quiz. */
+    public readonly usage = new Map<string, QuizUsage>();
 
     async findById(id: string): Promise<Quiz | null> {
         return this.quizzes.get(id) ?? null;
     }
 
-    async findAll(): Promise<Quiz[]> {
-        return [...this.quizzes.values()];
+    async findAll(options: { includeArchived?: boolean } = {}): Promise<Quiz[]> {
+        return [...this.quizzes.values()].filter((q) => options.includeArchived || !q.isArchived);
     }
 
     async save(quiz: Quiz): Promise<Quiz> {
@@ -38,9 +40,21 @@ export class InMemoryQuizRepository implements IQuizRepository {
             questionIds: s.questionIds.filter((qid) => questionIds.has(qid)),
         }));
 
-        const saved = new Quiz({ id, title: quiz.title, questions, sections, createdAt: quiz.createdAt });
+        const archivedAt = this.quizzes.get(id)?.archivedAt ?? null;
+        const saved = new Quiz({ id, title: quiz.title, questions, sections, createdAt: quiz.createdAt, archivedAt });
         this.quizzes.set(id, saved);
         return saved;
+    }
+
+    async findUsage(id: string): Promise<QuizUsage> {
+        return this.usage.get(id) ?? { assessmentSessions: 0, liveKnowledgeChecks: 0, trainingSessions: 0 };
+    }
+
+    async setArchived(id: string, archived: boolean): Promise<void> {
+        const quiz = this.quizzes.get(id);
+        if (!quiz) return;
+        const archivedAt = archived ? quiz.archivedAt ?? new Date() : null;
+        this.quizzes.set(id, new Quiz({ ...quiz, archivedAt }));
     }
 
     async delete(id: string): Promise<void> {

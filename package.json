@@ -4,7 +4,7 @@
   "private": true,
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node -e \"require('fs').copyFileSync('src/shared/infra/postgres/schema.sql','dist/shared/infra/postgres/schema.sql')\"",
     "predev": "docker compose up -d --wait",
     "dev": "ts-node-dev --respawn --transpile-only --no-notify src/server.ts",
     "start": "node dist/server.js",
@@ -14,6 +14,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "db:migrate": "ts-node src/shared/infra/postgres/migrate.ts",
+    "db:migrate:prod": "node dist/shared/infra/postgres/migrate.js",
     "bootstrap:admin": "ts-node src/shared/infra/postgres/bootstrapAdmin.ts"
   },
   "dependencies": {

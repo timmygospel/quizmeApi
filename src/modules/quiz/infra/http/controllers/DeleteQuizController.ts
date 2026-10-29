@@ -11,10 +11,15 @@ export class DeleteQuizController extends BaseController {
         try {
             const dto: DeleteQuizDTO = { id: this.req.params.id };
 
-            const result = await this.useCase.execute(dto);
+            const outcome = await this.useCase.execute(dto);
 
-            if (result.isFailure) {
-                return this.clientError(result.errorValue());
+            if (!outcome.ok) {
+                switch (outcome.error) {
+                    case "QUIZ_NOT_FOUND":
+                        return this.notFound(`Knowledge Module with id ${dto.id} not found`);
+                    case "QUIZ_IN_USE":
+                        return this.conflict(outcome.message);
+                }
             }
 
             return this.ok({ message: "Knowledge Module deleted successfully" });

@@ -34,6 +34,9 @@ router.post("/live-events", requireAuthenticatedUser, requirePermission("session
 
     if (!trimmedQuizId) return res.status(400).json({ message: "quizId is required" });
     if (!trimmedName) return res.status(400).json({ message: "name is required" });
+    if (await liveEventRepo.isQuizArchived(trimmedQuizId)) {
+        return res.status(409).json({ message: "This Knowledge Module is archived. Restore it from the Knowledge Modules page to use it again." });
+    }
 
     // generate unique readable code
     let eventCode = generateEventCode(6);

@@ -44,6 +44,11 @@ CREATE TABLE IF NOT EXISTS quizzes (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Archiving hides a Knowledge Module from lists and pickers without deleting
+-- it, so runs that used it (sessions, live_events, training_events) keep
+-- their results. Added via ALTER so it reaches existing databases.
+ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+
 -- A section is a named, ordered group inside one quiz; it cannot exist
 -- without its quiz. UNIQUE (quiz_id, id) is the target of the composite FK
 -- on quiz_questions below.

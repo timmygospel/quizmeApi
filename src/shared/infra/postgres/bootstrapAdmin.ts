@@ -13,7 +13,7 @@ import { UserEmail } from "../../../modules/users/domain/valueObjects/UserEmail"
 // chicken-and-egg loop by talking to the repositories directly, never over
 // HTTP, so RULE AUTH-05 ("every API request is authorised") stays true:
 // this isn't an API request, it's an operator running a script with direct
-// DB access (e.g. `fly ssh console` in production, or locally in dev).
+// DB access (e.g. the Render Shell in production, or locally in dev).
 //
 // Usage:
 //   npm run bootstrap:admin -- --email=you@company.com --firstName=Ada --lastName=Lovelace

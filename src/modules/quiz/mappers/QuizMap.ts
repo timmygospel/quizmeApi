@@ -11,6 +11,7 @@ export interface QuizRow {
     title: string;
     created_at: Date;
     updated_at: Date;
+    archived_at: Date | null;
 }
 
 export interface QuestionRow {
@@ -102,6 +103,7 @@ export class QuizMap {
             sections,
             createdAt: raw.quiz.created_at,
             updatedAt: raw.quiz.updated_at,
+            archivedAt: raw.quiz.archived_at,
         });
     }
 
@@ -119,6 +121,7 @@ export class QuizMap {
             unassignedQuestionIds: quiz.unassignedQuestionIds,
             createdAt: quiz.createdAt.toISOString(),
             updatedAt: quiz.updatedAt.toISOString(),
+            archivedAt: quiz.archivedAt?.toISOString() ?? null,
         };
     }
 

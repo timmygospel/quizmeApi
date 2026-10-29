@@ -14,7 +14,7 @@
 // hostname (these are random and change every `cloudflared` restart, so
 // they can't be pinned via CORS_EXTRA_ORIGINS — see
 // QuizAnalytics_Local_Live_Quiz_Dev_Setup §15 on quick vs. named tunnels).
-const DEFAULT_ORIGINS = ["http://localhost:5173", "https://mfquiz-web.fly.dev"];
+const DEFAULT_ORIGINS = ["http://localhost:5173"];
 
 const PRIVATE_LAN_ORIGIN = new RegExp(
     "^https?://(" +

@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { PoolClient } from "pg";
-import { IQuizRepository } from "../../domain/IQuizRepository";
+import { IQuizRepository, QuizUsage } from "../../domain/IQuizRepository";
 import { Quiz } from "../../domain/Quiz";
 import { QuizMap } from "../../mappers/QuizMap";
 import { pgPool } from "../../../../shared/infra/postgres/pgClient";
@@ -15,10 +15,11 @@ export class PgQuizRepository implements IQuizRepository {
         }
     }
 
-    async findAll(): Promise<Quiz[]> {
+    async findAll(options: { includeArchived?: boolean } = {}): Promise<Quiz[]> {
         const client = await pgPool.connect();
         try {
-            const { rows } = await client.query("SELECT id FROM quizzes ORDER BY created_at DESC");
+            const where = options.includeArchived ? "" : "WHERE archived_at IS NULL ";
+            const { rows } = await client.query(`SELECT id FROM quizzes ${where}ORDER BY created_at DESC`);
             const quizzes: Quiz[] = [];
             for (const row of rows) {
                 const quiz = await this.loadQuiz(client, row.id);
@@ -156,6 +157,29 @@ export class PgQuizRepository implements IQuizRepository {
             [sectionIds]
         );
         return new Map(rows.map((r) => [r.id, r.quiz_id]));
+    }
+
+    async findUsage(id: string): Promise<QuizUsage> {
+        const { rows } = await pgPool.query<{ sessions: number; live_events: number; training_events: number }>(
+            `SELECT
+                (SELECT count(*)::int FROM sessions WHERE template_id = $1) AS sessions,
+                (SELECT count(*)::int FROM live_events WHERE quiz_id = $1) AS live_events,
+                (SELECT count(*)::int FROM training_events WHERE quiz_id = $1) AS training_events`,
+            [id]
+        );
+        const r = rows[0];
+        return {
+            assessmentSessions: r.sessions,
+            liveKnowledgeChecks: r.live_events,
+            trainingSessions: r.training_events,
+        };
+    }
+
+    async setArchived(id: string, archived: boolean): Promise<void> {
+        await pgPool.query(
+            `UPDATE quizzes SET archived_at = ${archived ? "COALESCE(archived_at, now())" : "NULL"} WHERE id = $1`,
+            [id]
+        );
     }
 
     async delete(id: string): Promise<void> {

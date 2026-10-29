@@ -29,7 +29,7 @@ ENV NODE_ENV=production
 
 COPY --from=build /app /app
 
-# Fly will set PORT (commonly 8080 for http_service). Your app should bind to process.env.PORT.
+# The host sets PORT; the app binds to process.env.PORT (default 8080).
 EXPOSE 8080
 
 # Adjust if your built entry file is different (e.g., dist/index.js)

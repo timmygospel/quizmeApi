@@ -65,6 +65,7 @@ export class CreateTrainingEventUseCase {
 
             const quiz = await this.quizRepo.findById(input.quizId);
             if (!quiz) return Result.fail(`NOT_FOUND: Knowledge Module ${input.quizId} not found`);
+            if (quiz.isArchived) return Result.fail("CONFLICT: This Knowledge Module is archived. Restore it from the Knowledge Modules page to use it again.");
             // Each non-empty section becomes a Knowledge Check, in section order.
             const sections = quiz.sections.filter((s) => s.id && s.questionIds.length > 0);
             if (sections.length === 0) {

@@ -12,6 +12,7 @@ import { GetQuizUseCase } from "../../application/useCases/getQuiz/GetQuizUseCas
 
 import { GetAllQuizzesUseCase } from "../../application/useCases/getAllQuizzes/GetAllQuizzesUseCase";
 import { GetSectionQuestionsUseCase } from "../../application/useCases/getSectionQuestions/GetSectionQuestionsUseCase";
+import { SetQuizArchivedUseCase } from "../../application/useCases/setQuizArchived/SetQuizArchivedUseCase";
 // ✅ Controllers
 import { CreateQuizController } from "./controllers/CreateQuizController";
 import { UpdateQuizController } from "./controllers/UpdateQuizController";
@@ -19,6 +20,7 @@ import { DeleteQuizController } from "./controllers/DeleteQuizController";
 import { GetQuizController } from "./controllers/GetQuizController";
 import { GetAllQuizzesController } from "./controllers/GetAllQuizzesController";
 import { GetSectionQuestionsController } from "./controllers/GetSectionQuestionsController";
+import { SetQuizArchivedController } from "./controllers/SetQuizArchivedController";
 import { IQuizRepository } from "../../domain/IQuizRepository";
 import { IUserRepository } from "../../../users/domain/IUserRepository";
 import { IRoleRepository } from "../../../roles/domain/IRoleRepository";
@@ -54,6 +56,7 @@ export function createQuizRouter({ quizRepo: repo, userRepo, roleRepo }: QuizRou
     const getQuizUseCase = new GetQuizUseCase(repo);
     const getAllQuizzesUseCase = new GetAllQuizzesUseCase(repo);
     const getSectionQuestionsUseCase = new GetSectionQuestionsUseCase(repo);
+    const setQuizArchivedUseCase = new SetQuizArchivedUseCase(repo);
 
     // Instantiate controllers
     const createQuizController = new CreateQuizController(createQuizUseCase);
@@ -62,6 +65,8 @@ export function createQuizRouter({ quizRepo: repo, userRepo, roleRepo }: QuizRou
     const getQuizController = new GetQuizController(getQuizUseCase);
     const getAllQuizzesController = new GetAllQuizzesController(getAllQuizzesUseCase);
     const getSectionQuestionsController = new GetSectionQuestionsController(getSectionQuestionsUseCase);
+    const archiveQuizController = new SetQuizArchivedController(setQuizArchivedUseCase, true);
+    const restoreQuizController = new SetQuizArchivedController(setQuizArchivedUseCase, false);
 
     // ✅ Routes
     router.post(
@@ -84,6 +89,22 @@ export function createQuizRouter({ quizRepo: repo, userRepo, roleRepo }: QuizRou
         requirePermission("template.archive"),
         applyEffectiveScope,
         (req, res) => deleteQuizController.execute(req, res)
+    );
+    // Archive hides a module from lists/pickers but keeps it (and every run's
+    // results); restore brings it back. The way out when DELETE 409s.
+    router.post(
+        "/quizzes/:id/archive",
+        requireAuthenticatedUser,
+        requirePermission("template.archive"),
+        applyEffectiveScope,
+        (req, res) => archiveQuizController.execute(req, res)
+    );
+    router.post(
+        "/quizzes/:id/restore",
+        requireAuthenticatedUser,
+        requirePermission("template.archive"),
+        applyEffectiveScope,
+        (req, res) => restoreQuizController.execute(req, res)
     );
     router.get(
         "/quizzes/:id",

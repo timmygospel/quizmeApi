@@ -16,7 +16,10 @@ export class GetAllQuizzesController extends BaseController {
 
     protected async executeImpl(): Promise<any> {
         try {
-            const result: Result<Quiz[]> = await this.useCase.execute();
+            // Archived modules only show up when asked for (the admin list);
+            // every picker that starts a new run gets active ones only.
+            const includeArchived = this.req.query.includeArchived === "true";
+            const result: Result<Quiz[]> = await this.useCase.execute({ includeArchived });
 
             if (result.isFailure) {
                 return this.fail(result.errorValue());

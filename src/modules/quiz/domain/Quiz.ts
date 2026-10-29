@@ -25,6 +25,8 @@ export interface QuizProps {
     sections?: QuizSection[];
     createdAt?: Date;
     updatedAt?: Date;
+    /** Set when archived: hidden from lists and can't start new runs. */
+    archivedAt?: Date | null;
 }
 
 export class Quiz {
@@ -34,6 +36,7 @@ export class Quiz {
     public readonly sections: QuizSection[];
     public readonly createdAt: Date;
     public readonly updatedAt: Date;
+    public readonly archivedAt: Date | null;
 
     constructor(props: QuizProps) {
         this.id = props.id;
@@ -42,6 +45,11 @@ export class Quiz {
         this.sections = props.sections || [];
         this.createdAt = props.createdAt || new Date();
         this.updatedAt = props.updatedAt || new Date();
+        this.archivedAt = props.archivedAt ?? null;
+    }
+
+    public get isArchived(): boolean {
+        return this.archivedAt !== null;
     }
 
     /**

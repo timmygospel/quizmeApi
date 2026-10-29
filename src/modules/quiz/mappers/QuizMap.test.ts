@@ -7,6 +7,7 @@ describe("QuizMap.toDomain", () => {
             title: "Fire Safety",
             created_at: new Date("2026-01-01T00:00:00Z"),
             updated_at: new Date("2026-01-02T00:00:00Z"),
+            archived_at: null,
         },
         questions: [
             { id: "q1", quiz_id: "quiz-1", question_text: "What do you do first?", display_order: 0, section_id: "s1", section_position: 0 },

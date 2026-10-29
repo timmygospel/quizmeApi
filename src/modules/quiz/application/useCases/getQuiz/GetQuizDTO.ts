@@ -30,4 +30,6 @@ export interface QuizDTO {
     unassignedQuestionIds: string[];
     createdAt?: string;
     updatedAt?: string;
+    /** ISO timestamp when archived; null for an active Knowledge Module. */
+    archivedAt: string | null;
 }

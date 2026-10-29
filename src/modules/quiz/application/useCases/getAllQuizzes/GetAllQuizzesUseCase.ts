@@ -8,12 +8,12 @@ import { Result } from "../../../../../shared/core/Result";
  * QuizMap.toDTO before serializing — Quiz/Question/Option fields are
  * Value Object instances (e.g. `title.value`), not plain strings.
  */
-export class GetAllQuizzesUseCase implements UseCase<void, Result<Quiz[]>> {
+export class GetAllQuizzesUseCase implements UseCase<{ includeArchived?: boolean } | void, Result<Quiz[]>> {
     constructor(private quizRepo: IQuizRepository) { }
 
-    async execute(): Promise<Result<Quiz[]>> {
+    async execute(options: { includeArchived?: boolean } = {}): Promise<Result<Quiz[]>> {
         try {
-            const quizzes = await this.quizRepo.findAll();
+            const quizzes = await this.quizRepo.findAll(options);
             return Result.ok<Quiz[]>(quizzes);
         } catch (error) {
             console.error("[GetAllQuizzesUseCase] Error:", error);

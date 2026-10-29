@@ -66,6 +66,9 @@ export class CreateSessionUseCase implements UseCase<CreateSessionDTO, Promise<R
             if (!template) {
                 return Result.fail(`Training template with id ${dto.templateId} not found`);
             }
+            if (template.isArchived) {
+                return Result.fail("This Knowledge Module is archived. Restore it from the Knowledge Modules page to use it again.");
+            }
 
             // ✅ 6. Build the Aggregate Root (Session)
             const session = new Session({

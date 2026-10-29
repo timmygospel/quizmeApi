@@ -149,7 +149,7 @@ npm run bootstrap:admin -- --email=you@company.com --firstName=Ada --lastName=Lo
 ```
 
 (or set `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_FIRST_NAME` / `BOOTSTRAP_ADMIN_LAST_NAME`
-env vars instead of flags — handy for a deploy hook, e.g. `fly ssh console` in
+env vars instead of flags — handy for a deploy hook, e.g. the Render Shell in
 production.)
 
 This creates a `users` row with status `INVITED` and the **Organisation Admin**
