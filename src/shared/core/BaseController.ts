@@ -5,14 +5,18 @@ export abstract class BaseController {
     protected res!: Response;
 
     public async execute(req: Request, res: Response): Promise<void> {
-        this.req = req;
-        this.res = res;
+        // Routes share one controller instance, so req/res can't live on it: overlapping
+        // requests would overwrite each other's, leaving one unanswered and answering the
+        // other twice. Each request gets its own view of the instance instead.
+        const scoped: this = Object.create(this);
+        scoped.req = req;
+        scoped.res = res;
 
         try {
-            await this.executeImpl();
+            await scoped.executeImpl();
         } catch (err: any) {
             console.error("[Controller Error]", err);
-            this.fail("An unexpected error occurred");
+            scoped.fail("An unexpected error occurred");
         }
     }
 
@@ -69,6 +73,9 @@ export abstract class BaseController {
 
     public fail(error: any) {
         console.error("[Controller Failure]:", error);
+        // Already answered: responding again would throw, and nothing above execute() catches
+        // it, so the rejection would take the whole process down.
+        if (this.res.headersSent) return this.res;
         return this.res.status(500).json({
             message: error instanceof Error ? error.message : String(error),
         });
