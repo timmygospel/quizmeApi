@@ -70,6 +70,7 @@ function makeDepartmentRepo(exists = true): IDepartmentRepository {
         findById: jest.fn().mockResolvedValue(exists ? ({ id: "dept-1" } as any) : null),
         findAll: jest.fn(),
         save: jest.fn(),
+        isInUse: jest.fn().mockResolvedValue(false),
         delete: jest.fn(),
     };
 }
@@ -79,6 +80,7 @@ function makeLocationRepo(exists = true): ILocationRepository {
         findById: jest.fn().mockResolvedValue(exists ? ({ id: "loc-1" } as any) : null),
         findAll: jest.fn(),
         save: jest.fn(),
+        isInUse: jest.fn().mockResolvedValue(false),
         delete: jest.fn(),
     };
 }

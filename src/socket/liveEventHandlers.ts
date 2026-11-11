@@ -289,6 +289,20 @@ function emitQuestionState(
    Socket Registration
 ------------------------------*/
 
+/**
+ * Tells every phone in the event (and the host's admin channel) that the event is over, so their
+ * screens move to the "session ended" state. Emits through the socket server if it's running (it
+ * isn't in unit tests or scripts).
+ */
+export function notifyLiveEventEnded(getServer: () => Server, eventCode: string): void {
+    const code = safeCode(eventCode);
+    try {
+        getServer().to(room(code)).to(adminRoom(code)).emit("event:ended", { eventCode: code });
+    } catch {
+        /* socket server not initialised — nothing to notify */
+    }
+}
+
 export function registerLiveEventHandlers(io: Server) {
     io.on("connection", (socket: Socket) => {
 

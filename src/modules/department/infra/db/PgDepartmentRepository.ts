@@ -47,6 +47,23 @@ export class PgDepartmentRepository implements IDepartmentRepository {
         }
     }
 
+    async isInUse(id: string): Promise<boolean> {
+        // Every table that points at a department. The FK-less sessions.department_ids array is
+        // compared as text since it holds plain ids.
+        const { rows } = await pgPool.query<{ in_use: boolean }>(
+            `SELECT (
+                EXISTS (SELECT 1 FROM users WHERE department_id = $1)
+                OR EXISTS (SELECT 1 FROM user_role_departments WHERE department_id = $1)
+                OR EXISTS (SELECT 1 FROM sessions WHERE $1::text = ANY(department_ids))
+                OR EXISTS (SELECT 1 FROM session_participant WHERE department_id = $1)
+                OR EXISTS (SELECT 1 FROM test_session_audiences WHERE department_id = $1)
+                OR EXISTS (SELECT 1 FROM test_session_participants WHERE department_id = $1)
+            ) AS in_use`,
+            [id]
+        );
+        return rows[0]?.in_use === true;
+    }
+
     async delete(id: string): Promise<void> {
         await pgPool.query("DELETE FROM departments WHERE id = $1", [id]);
     }

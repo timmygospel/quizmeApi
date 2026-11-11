@@ -10,6 +10,8 @@ export class DeleteDepartmentUseCase {
             const existing = await this.repo.findById(dto.id);
             if (!existing) return Result.fail(`Department with id ${dto.id} not found`);
 
+            if (await this.repo.isInUse(dto.id)) return Result.fail("DEPARTMENT_IN_USE");
+
             await this.repo.delete(dto.id);
             return Result.ok();
         } catch (err) {

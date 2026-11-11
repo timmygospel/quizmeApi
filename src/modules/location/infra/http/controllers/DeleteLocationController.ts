@@ -14,6 +14,11 @@ export class DeleteLocationController extends BaseController {
             const result: Result<void> = await this.useCase.execute({ id });
 
             if (result.isFailure) {
+                if (result.errorValue() === "LOCATION_IN_USE") {
+                    return this.conflict(
+                        "This location is still in use by users, roles or sessions, so it can't be deleted. You can still rename it."
+                    );
+                }
                 return this.clientError(result.errorValue());
             }
 

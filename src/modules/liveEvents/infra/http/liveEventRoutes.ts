@@ -1,6 +1,8 @@
 import express from "express";
 import crypto from "crypto";
 import { PgLiveEventRepository } from "../db/PgLiveEventRepository";
+import { getIO } from "../../../../socket";
+import { notifyLiveEventEnded } from "../../../../socket/liveEventHandlers";
 import { generateEventCode } from "../../../../shared/core/shortCode";
 import { PgUserRepository } from "../../../users/infra/db/PgUserRepository";
 import { PgRoleRepository } from "../../../roles/infra/db/PgRoleRepository";
@@ -95,6 +97,7 @@ router.post("/live-events/:eventCode/end", async (req, res) => {
     if (ev.admin_token !== adminToken) return res.status(401).json({ message: "Unauthorized" });
 
     await liveEventRepo.endEvent(ev.id);
+    notifyLiveEventEnded(getIO, ev.event_code);
 
     return res.status(200).json({ eventCode: ev.event_code, status: "ended" });
 });
